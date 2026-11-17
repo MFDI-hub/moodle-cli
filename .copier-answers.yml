@@ -1,0 +1,10 @@
+# Changes here will be overwritten by Copier. Do not edit manually.
+_commit: 2f56324
+_src_path: https://github.com/MFDI-hub/python-template
+copyright_year: '2026'
+package_author_email: changeme@example.com
+package_author_name: changeme
+package_description: Python CLI for Moodle Web Services REST API
+package_github_org: MFDI-hub
+package_module: moodle_cli
+package_name: moodle-cli
