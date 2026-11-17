@@ -10,7 +10,7 @@ authors = [
     { name = "changeme", email = "changeme@example.com" },
 ]
 readme = "README.md"
-license = "MIT"
+license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 # Version comes from git tags at build time (see [tool.uv-dynamic-versioning]).
 dynamic = ["version"]
@@ -33,14 +33,20 @@ classifiers = [
     # "Private :: Do Not Upload",
 ]
 
-dependencies = []
+dependencies = [
+    "click>=8.1",
+    "httpx>=0.27",
+    "pydantic>=2.0",
+    "rich>=13.0",
+    "keyring>=25.0",
+    "tomli-w>=1.0",
+]
 
 [project.optional-dependencies]
-# Extras are optional *runtime* features your users opt into, e.g.
-#   pip install moodle-cli[fast]
-# Start empty. deptry reports extras that nothing imports as unused (DEP002),
-# so only add one when the code actually uses it behind a guarded import.
-# fast = ["orjson>=3.10"]
+qr = [
+    "pyzbar>=0.1.9",
+    "pillow>=10.0",
+]
 
 [project.urls]
 Repository = "https://github.com/MFDI-hub/moodle-cli"
@@ -48,9 +54,9 @@ Repository = "https://github.com/MFDI-hub/moodle-cli"
 # Documentation = "https://..."
 
 [project.scripts]
-# Prefer the module name (snake_case); hyphens in a console script name can
-# break the generated .exe shim on Windows.
-moodle_cli = "moodle_cli.moodle_cli:main"
+moodle = "moodle_cli.cli.main:cli"
+moodle_cli = "moodle_cli.cli.main:cli"
+moodle_readonly = "moodle_cli.cli.readonly:cli_readonly"
 
 
 # ---- Dependency groups (PEP 735) ----
@@ -75,6 +81,7 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-asyncio>=1.4.1",
     "pytest-mock>=3.17.0",
+    "respx>=0.22",
     # Shuffles test order. `make test-random` runs once with it and once without.
     "pytest-randomly>=5.1.0",
     # Git hooks, commits, releases.

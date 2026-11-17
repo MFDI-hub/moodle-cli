@@ -1,3 +1,5 @@
-from .moodle_cli import main
+"""Allow running with `python -m moodle_cli`."""
 
-main()
+from moodle_cli.cli.main import cli
+
+cli()

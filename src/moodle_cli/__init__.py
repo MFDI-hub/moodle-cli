@@ -1,4 +1,7 @@
-"""moodle-cli: Python CLI for Moodle Web Services REST API."""
+# Copyright (C) 2026 Marc Alier, Juanan Pereira — LAMB Project
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+"""moodle-cli — A Python CLI for Moodle Web Services."""
 
 from __future__ import annotations
 
@@ -7,9 +10,6 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("moodle-cli")
 except PackageNotFoundError:  # pragma: no cover
-    __version__ = "0.0.0"
+    __version__ = "0.1.0"
 
 __all__ = ["__version__"]
-
-# Re-export your public API from here (e.g. `from .core import Client`) and add
-# each name to __all__. Avoid wildcard imports: they break static analysis.
