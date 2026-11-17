@@ -24,7 +24,7 @@ def test_version() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert "moodle-cli, version" in result.output
 
 
 def test_all_groups_present() -> None:
