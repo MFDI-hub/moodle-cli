@@ -46,7 +46,7 @@ dependencies = [
 [project.optional-dependencies]
 qr = [
     "pyzbar>=0.1.9",
-    "pillow>=10.0",
+    "pillow>=13.0.0",
 ]
 sync = [
     "yt-dlp>=2024.8.0",
