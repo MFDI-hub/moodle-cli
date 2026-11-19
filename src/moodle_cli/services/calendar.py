@@ -2,21 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import Field
 
-from moodle_cli.services.base import BaseService
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class CalendarEvent(BaseModel):
+class CalendarEvent(MoodleModel):
     id: int
     name: str = ""
     description: str = ""
-    eventtype: str = ""
-    courseid: int = 0
-    timestart: int = 0
-    timeduration: int = 0
+    event_type: Annotated[str, Field(validation_alias="eventtype")] = ""
+    course_id: Annotated[int, Field(validation_alias="courseid")] = 0
+    time_start: Annotated[int, Field(validation_alias="timestart")] = 0
+    time_duration: Annotated[int, Field(validation_alias="timeduration")] = 0
 
 
 class CalendarService(BaseService):
@@ -30,7 +30,7 @@ class CalendarService(BaseService):
             events=events,
             options=options,
         )
-        return [CalendarEvent(**e) for e in data.get("events", [])]
+        return [CalendarEvent.model_validate(e) for e in data.get("events", [])]
 
     def get_upcoming(self, limit: int = 20) -> list[CalendarEvent]:
         """Upcoming action events sorted by time (core_calendar_get_action_events_by_timesort).
@@ -39,31 +39,41 @@ class CalendarService(BaseService):
         events across all the user's courses, soonest first.
         """
         data = self.call("core_calendar_get_action_events_by_timesort", limitnum=limit)
-        return [CalendarEvent(**e) for e in data.get("events", [])]
+        return [CalendarEvent.model_validate(e) for e in data.get("events", [])]
 
     def get_course_events(self, course_id: int) -> list[CalendarEvent]:
         """Action events (deadlines etc.) for a single course
         (core_calendar_get_action_events_by_course)."""
         data = self.call("core_calendar_get_action_events_by_course", courseid=course_id)
-        return [CalendarEvent(**e) for e in data.get("events", [])]
+        return [CalendarEvent.model_validate(e) for e in data.get("events", [])]
 
     def create_event(
         self,
         name: str,
-        eventtype: str = "user",
-        timestart: int = 0,
-        timeduration: int = 0,
+        event_type: str = "user",
+        time_start: int = 0,
+        time_duration: int = 0,
         description: str = "",
-        courseid: int = 0,
+        course_id: int = 0,
     ) -> CalendarEvent:
         event_data: dict[str, Any] = {
             "name": name,
-            "eventtype": eventtype,
-            "timestart": timestart,
-            "timeduration": timeduration,
+            "eventtype": event_type,
+            "timestart": time_start,
+            "timeduration": time_duration,
             "description": description,
         }
-        if courseid:
-            event_data["courseid"] = courseid
+        if course_id:
+            event_data["courseid"] = course_id
         data = self.call("core_calendar_create_calendar_events", events=[event_data])
-        return CalendarEvent(**data["events"][0])
+        return CalendarEvent.model_validate(data["events"][0])
+
+    def update_event(self, event_id: int, **kwargs: Any) -> Any:
+        formdata = {"id": event_id, **kwargs}
+        return self.call("core_calendar_submit_create_update_form", formdata=formdata)
+
+    def delete_events(self, event_ids: list[int], repeat: int = 0) -> None:
+        self.call(
+            "core_calendar_delete_calendar_events",
+            events=[{"eventid": eid, "repeat": repeat} for eid in event_ids],
+        )

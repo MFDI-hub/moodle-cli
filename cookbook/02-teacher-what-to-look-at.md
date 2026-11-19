@@ -41,8 +41,8 @@ moodle-readonly -p default forum posts 647185
 > poster isn't you.
 > ```bash
 > moodle-readonly -p default --json forum discussions <forum_id> \
->   | jq -r '.[] | select(.usermodifiedfullname != "Your Name")
->            | "\(.discussion)\t\(.subject)\tlast: \(.usermodifiedfullname)"'
+>   | jq -r '.[] | select(.last_author != "Your Name")
+>            | "\(.id)\t\(.subject)\tlast: \(.last_author)"'
 > ```
 
 ## 2. Work to grade
@@ -54,12 +54,12 @@ moodle-readonly -p default assign submissions <assignment_id>
 ```
 
 The submissions table shows `Status` (submitted / new) and `Grading` (graded /
-notgraded). Filter for `gradingstatus = notgraded` + `status = submitted` to find the
+notgraded). Filter for `grading_status = notgraded` + `status = submitted` to find the
 pile that needs you:
 
 ```bash
 moodle-readonly -p default --json assign submissions <assignment_id> \
-  | jq -r '.[] | select(.status=="submitted" and .gradingstatus=="notgraded") | .userid'
+  | jq -r '.[] | select(.status=="submitted" and .grading_status=="notgraded") | .user_id'
 ```
 
 ## 3. Deadlines coming up
@@ -84,7 +84,7 @@ moodle-readonly -p default enrol list-users "$C" --role student
 ```bash
 # Students who have NEVER accessed the course
 moodle-readonly -p default --json enrol list-users "$C" \
-  | jq -r '.[] | select((.roles[].shortname=="student") and ((.lastcourseaccess // 0)==0)) | .fullname'
+  | jq -r '.[] | select((.roles[].shortname=="student") and ((.last_course_access // 0)==0)) | .full_name'
 ```
 
 ## 5. Notes you (or a co-teacher) left on students

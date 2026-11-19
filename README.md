@@ -11,6 +11,31 @@ Licensed under the [GNU General Public License v3.0](LICENSE).
 uv sync
 ```
 
+Use it as a library from another local project (this is how `lecturer` depends on it):
+
+```toml
+dependencies = ["moodle-cli"]
+
+# uv: sibling checkout
+[tool.uv.sources]
+moodle-cli = { path = "../moodle-cli", editable = true }
+```
+
+```python
+from moodle_cli import Moodle
+
+moodle = Moodle.load("soton")
+course = moodle.course("COMP3204")
+course.dump("COMP3204")
+```
+
+After this repo is on GitHub, the same dependency can point at git instead of a path:
+
+```toml
+[tool.uv.sources]
+moodle-cli = { git = "https://github.com/MFDI-hub/moodle-cli.git" }
+```
+
 ## Quick Start
 
 ```bash
@@ -50,6 +75,27 @@ moodle auth login --url https://your-moodle-site.com --username youruser --token
 ```
 
 > **Note**: The `--token` flag bypasses the username/password authentication flow and stores the provided token directly.
+
+## Browser session (no web-service token)
+
+Some sites disable the mobile web service, so there is no token to copy. If you already have a Playwright storage-state file from a signed-in browser (lecturer writes one with `moodle-fetch --login-save`), point the CLI at it:
+
+```bash
+moodle auth session --storage-state C:\path\to\moodle_storage.json --name soton
+
+moodle -p soton site info
+moodle -p soton enrol my-courses
+moodle -p soton course timeline
+moodle -p soton calendar upcoming
+```
+
+Or skip saving a profile and pass the file once:
+
+```bash
+moodle --storage-state C:\path\to\moodle_storage.json enrol my-courses
+```
+
+The file is a cookie jar, not a token. Commands use the same web functions the Moodle pages use. Functions that exist only on the mobile web service stay unavailable.
 
 ## QR login (sites that show a QR code instead of a token)
 
@@ -95,7 +141,7 @@ If you'd rather not install anything, decode the QR yourself (any QR reader) and
 
 | Group        | Commands                                      |
 |-------------|-----------------------------------------------|
-| `auth`      | login, qr-login, logout, status, profiles     |
+| `auth`      | login, qr-login, session, logout, status, profiles |
 | `site`      | info, functions                                |
 | `course`    | list, get, search, contents, categories, module, timeline, create, update, delete |
 | `user`      | me, list, get, profiles, create, update, delete |
@@ -179,7 +225,7 @@ issuers, the wiki edit-lock, draft-area allocators, `*_view_*` completion-trigge
 ## Architecture
 
 ```
-CLI Layer (Click) → Service Layer (Pydantic models) → Client Layer (httpx)
+CLI Layer (Click) → Service Layer (Pydantic models) → Client Layer (curl_cffi)
 ```
 
 - **Client**: Single `MoodleHTTPClient.call(wsfunction, **params)` method with bracket-notation parameter flattening

@@ -35,17 +35,27 @@ classifiers = [
 
 dependencies = [
     "click>=8.1",
-    "httpx>=0.27",
     "pydantic>=2.0",
     "rich>=13.0",
     "keyring>=25.0",
     "tomli-w>=1.0",
+    "curl-cffi>=0.17",
+    "pyyaml>=6.0",
 ]
 
 [project.optional-dependencies]
 qr = [
     "pyzbar>=0.1.9",
     "pillow>=10.0",
+]
+sync = [
+    "yt-dlp>=2024.8.0",
+]
+notify = [
+    "slixmpp>=1.8.0",
+]
+browser = [
+    "playwright>=1.40",
 ]
 
 [project.urls]
@@ -54,9 +64,10 @@ Repository = "https://github.com/MFDI-hub/moodle-cli"
 # Documentation = "https://..."
 
 [project.scripts]
-moodle = "moodle_cli.cli.main:cli"
-moodle_cli = "moodle_cli.cli.main:cli"
-moodle_readonly = "moodle_cli.cli.readonly:cli_readonly"
+moodle = "moodle_cli.cli.main:main"
+moodle-readonly = "moodle_cli.cli.readonly:main"
+moodle_cli = "moodle_cli.cli.main:main"
+moodle_readonly = "moodle_cli.cli.readonly:main"
 
 
 # ---- Dependency groups (PEP 735) ----
@@ -69,7 +80,8 @@ moodle_readonly = "moodle_cli.cli.readonly:cli_readonly"
 dev = [
     # Lint, format, type check.
     "ruff>=0.17.3",
-    "ty>=0.0.96",
+    # Pin an exact preview: ty is pre-1.0 and config/rule names have moved between releases.
+    "ty==0.0.104",
     "codespell>=2.4.3",
     "vulture>=2.16",
     "deptry>=0.25.1",
@@ -81,7 +93,6 @@ dev = [
     "pytest-timeout>=2.4.0",
     "pytest-asyncio>=1.4.1",
     "pytest-mock>=3.17.0",
-    "respx>=0.22",
     # Shuffles test order. `make test-random` runs once with it and once without.
     "pytest-randomly>=5.1.0",
     # Git hooks, commits, releases.
@@ -170,9 +181,9 @@ select = [
     "PGH",     # pygrep-hooks (no blanket "# type: ignore" / "# noqa")
     "RUF",     # ruff-specific
     "S",       # flake8-bandit (security) — remove if it gets in the way
+    "ANN",     # flake8-annotations — ty has no --strict / disallow_untyped_defs
     # "D",     # pydocstyle (docstrings) — enable once you write docstrings
     # "N",     # pep8-naming
-    # "ANN",   # flake8-annotations (needs ty's ruff-era typing discipline)
     # "PT",    # flake8-pytest-style
     # "TRY",   # tryceratops
 ]
@@ -181,6 +192,9 @@ ignore = [
     "E501",    # https://docs.astral.sh/ruff/rules/line-too-long/ — the formatter owns line length
     "E402",    # module-import-not-at-top-of-file — needed for sys.path/uv scripts
     "E731",    # lambda-assignment — handy for short callbacks
+    # Ruff cannot re-enable a globally ignored rule per-file. ANN401 stays off
+    # everywhere; moodle_field (the Any helper) is gone, so the worst Any is gone.
+    "ANN401",
     # Always disable these when using ruff format + ruff check together:
     # https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
     "W191", "E111", "E114", "E117",
@@ -192,7 +206,8 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 # Tests often need "unused" fixture arguments and assert inside helpers.
-"tests/**" = ["ARG001", "ARG002", "S101", "B018", "S105", "S106"]
+# ANN: tests are not the annotation-completeness surface.
+"tests/**" = ["ARG001", "ARG002", "S101", "B018", "S105", "S106", "ANN"]
 # T201: scripts are thin wrappers that legitimately print.
 # S603/S607: they also legitimately shell out to tools like git.
 "scripts/**" = ["T201", "S603", "S607"]
@@ -219,15 +234,36 @@ python-version = "3.11"
 [tool.ty.src]
 include = ["src", "tests", "devtools", "scripts"]
 
+[tool.ty.analysis]
+# Optional extras (qr / browser / notify / sync). Local `uv sync` without
+# --all-extras still type-checks; CI installs extras so anything *not* on this
+# list is a genuine missing import.
+# `import-not-found` stays error (it is not demoted to warn) so this list is
+# the only hole — no fight with terminal.error-on-warning.
+respect-type-ignore-comments = false
+allowed-unresolved-imports = [
+    "playwright.**",
+    "pyzbar.**",
+    "yt_dlp.**",
+    "slixmpp.**",
+    "PIL.**",
+]
+
 [tool.ty.rules]
-# ty is pre-1.0 and some rules are noisy; demote here instead of ignoring whole
-# files. `uv run ty check --output-format concise` lists every diagnostic code.
+# ty is pre-1.0. `uv run ty check --output-format concise` lists rule names.
+# `unresolved-import` was renamed to `import-not-found` in 0.0.97 (alias still works).
+# ty has no `invalid-return-type`; the split rules are listed instead.
+import-not-found = "error"
+invalid-argument-type = "error"
+invalid-explicit-return = "error"
+invalid-implicit-return = "error"
+invalid-assignment = "error"
+possibly-unresolved-reference = "error"
 unused-ignore-comment = "warn"
 
-# Unresolved third-party imports are an environment problem, not a code problem.
-# If a dependency ships no stubs or py.typed marker, allow it explicitly:
-# [tool.ty.analysis]
-# allowed-unresolved-imports = ["untyped_package.**"]
+[tool.ty.terminal]
+# unused-ignore-comment is warn. Keep warnings non-fatal; CI gates on errors.
+error-on-warning = false
 
 # ---- codespell ----
 # https://github.com/codespell-project/codespell
@@ -246,13 +282,12 @@ python_files = ["*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 testpaths = ["tests"]
-# src/ layout: make the package importable without installing it first.
-pythonpath = ["src"]
 addopts = [
     "-ra",
     "-q",
     "--strict-markers",
     "--strict-config",
+    "--import-mode=importlib",
     # Fail a hung test instead of hanging CI forever.
     "--timeout=60",
 ]
@@ -314,6 +349,8 @@ extend_exclude = ["devtools", "scripts", "docs"]
 [tool.deptry.package_module_name_map]
 # Mapping a package to its import name also silences "Assuming the corresponding
 # module name of package ..." notices.
+curl-cffi = "curl_cffi"
+pyyaml = "yaml"
 mkdocs-material = "material"
 mkdocs-git-revision-date-localized-plugin = "mkdocs_git_revision_date_localized_plugin"
 uv-dynamic-versioning = "uv_dynamic_versioning"

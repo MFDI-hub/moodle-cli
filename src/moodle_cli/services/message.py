@@ -2,28 +2,28 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import Field
 
-from moodle_cli.services.base import BaseService
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class Message(BaseModel):
+class MessageRecord(MoodleModel):
     id: int
-    useridfrom: int = 0
-    useridto: int = 0
+    user_id_from: Annotated[int, Field(validation_alias="useridfrom")] = 0
+    user_id_to: Annotated[int, Field(validation_alias="useridto")] = 0
     text: str = ""
-    timecreated: int = 0
+    time_created: Annotated[int, Field(validation_alias="timecreated")] = 0
 
 
-class Conversation(BaseModel):
+class ConversationRecord(MoodleModel):
     id: int
     name: str | None = None
     type: int = 1
-    membercount: int = 0
+    member_count: Annotated[int, Field(validation_alias="membercount")] = 0
     # Moodle returns null (not 0) for a conversation with nothing unread.
-    unreadcount: int | None = None
+    unread_count: Annotated[int | None, Field(validation_alias="unreadcount")] = None
 
 
 class MessageService(BaseService):
@@ -39,7 +39,7 @@ class MessageService(BaseService):
         user_id: int,
         user_id_from: int = 0,
         message_type: str = "conversations",
-    ) -> list[Message]:
+    ) -> list[MessageRecord]:
         data = self.call(
             "core_message_get_messages",
             useridto=user_id,
@@ -48,14 +48,14 @@ class MessageService(BaseService):
             read=0,
             newestfirst=1,
         )
-        return [Message(**m) for m in data.get("messages", [])]
+        return [MessageRecord.model_validate(m) for m in data.get("messages", [])]
 
-    def get_conversations(self, user_id: int) -> list[Conversation]:
+    def get_conversations(self, user_id: int) -> list[ConversationRecord]:
         data = self.call(
             "core_message_get_conversations",
             userid=user_id,
         )
-        return [Conversation(**c) for c in data.get("conversations", [])]
+        return [ConversationRecord.model_validate(c) for c in data.get("conversations", [])]
 
     def get_conversation_messages(
         self, current_user_id: int, conversation_id: int
@@ -69,9 +69,7 @@ class MessageService(BaseService):
 
     def unread_count(self, user_id: int) -> int:
         """Number of conversations with unread messages."""
-        data = self.call(
-            "core_message_get_unread_conversations_count", useridto=user_id
-        )
+        data = self.call("core_message_get_unread_conversations_count", useridto=user_id)
         if isinstance(data, dict):
             return int(data.get("count", 0))
         return int(data)

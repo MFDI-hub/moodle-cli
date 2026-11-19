@@ -1,5 +1,8 @@
-"""Allow running with `python -m moodle_cli`."""
+"""Allow running with ``python -m moodle_cli``."""
 
-from moodle_cli.cli.main import cli
+from __future__ import annotations
 
-cli()
+from moodle_cli.cli.main import main
+
+if __name__ == "__main__":
+    main()

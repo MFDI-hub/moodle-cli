@@ -1,13 +1,12 @@
-"""JSON output renderer."""
+"""JSON output renderer (also YAML and CSV when those formats are selected)."""
 
 from __future__ import annotations
 
-import json as _json
 from typing import Any
 
-from moodle_cli.output.console import console
+from moodle_cli.output.encode import write_machine
 
 
 def render_json(data: Any) -> None:
-    """Pretty-print data as JSON."""
-    console.print_json(_json.dumps(data, default=str))
+    """Write machine-readable output to stdout."""
+    write_machine(data)

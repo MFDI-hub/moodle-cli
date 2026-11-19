@@ -11,15 +11,21 @@ many chars were cut.
 from __future__ import annotations
 
 import re
+from typing import TYPE_CHECKING
 
-import respx
 from click.testing import CliRunner
-from httpx import Response
 
+from moodle_cli.api import Moodle
 from moodle_cli.cli.main import MoodleContext, cli
 from moodle_cli.cli.readonly import cli_readonly
 from moodle_cli.client.http import MoodleHTTPClient
 from moodle_cli.output import trim
+from tests.http_mock import Response, mock_transport
+
+if TYPE_CHECKING:
+    import pytest
+    from click.core import Command
+    from click.testing import Result
 
 BASE_URL = "https://moodle.example.com"
 
@@ -100,26 +106,26 @@ def _squash(s: str) -> str:
     return re.sub(r"[^0-9A-Za-z…\[\]]+", "", s)
 
 
-def _invoke_posts(monkeypatch, args: list[str], entry=cli):  # type: ignore[no-untyped-def]
-    def fake_get_client(self: MoodleContext) -> MoodleHTTPClient:
-        return MoodleHTTPClient(base_url=BASE_URL, token="t")
+def _invoke_posts(monkeypatch: pytest.MonkeyPatch, args: list[str], entry: Command = cli) -> Result:
+    def fake_get_moodle(self: MoodleContext) -> Moodle:
+        return Moodle(MoodleHTTPClient(base_url=BASE_URL, token="t"))
 
-    monkeypatch.setattr(MoodleContext, "get_client", fake_get_client)
-    with respx.mock(assert_all_called=False) as router:
+    monkeypatch.setattr(MoodleContext, "get_moodle", fake_get_moodle)
+    with mock_transport() as router:
         router.post(f"{BASE_URL}/webservice/rest/server.php").mock(
             return_value=Response(200, json=POSTS_RESPONSE)
         )
         return CliRunner().invoke(entry, args)
 
 
-def test_forum_posts_full_text_by_default(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_forum_posts_full_text_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _invoke_posts(monkeypatch, ["forum", "posts", "42"])
     assert result.exit_code == 0, result.output
     assert LONG_MESSAGE in _squash(result.output)
     assert "trimmed" not in result.output
 
 
-def test_forum_posts_trim_is_explicit(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_forum_posts_trim_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _invoke_posts(monkeypatch, ["--trim-messages", "40", "forum", "posts", "42"])
     assert result.exit_code == 0, result.output
     squashed = _squash(result.output)
@@ -129,7 +135,7 @@ def test_forum_posts_trim_is_explicit(monkeypatch) -> None:  # type: ignore[no-u
     assert "trimmed260chars" in squashed.replace("…", "").replace("[", "").replace("]", "")
 
 
-def test_forum_posts_trim_on_readonly_binary(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+def test_forum_posts_trim_on_readonly_binary(monkeypatch: pytest.MonkeyPatch) -> None:
     result = _invoke_posts(
         monkeypatch, ["--trim-messages", "40", "forum", "posts", "42"], entry=cli_readonly
     )
@@ -137,10 +143,8 @@ def test_forum_posts_trim_on_readonly_binary(monkeypatch) -> None:  # type: igno
     assert "trimmed" in result.output
 
 
-def test_forum_posts_json_never_trimmed(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    result = _invoke_posts(
-        monkeypatch, ["--json", "--trim-messages", "40", "forum", "posts", "42"]
-    )
+def test_forum_posts_json_never_trimmed(monkeypatch: pytest.MonkeyPatch) -> None:
+    result = _invoke_posts(monkeypatch, ["--json", "--trim-messages", "40", "forum", "posts", "42"])
     assert result.exit_code == 0, result.output
     assert LONG_MESSAGE in result.output
     assert "trimmed" not in result.output

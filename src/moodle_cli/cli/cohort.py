@@ -19,16 +19,15 @@ def cohort() -> None:
 @handle_errors
 def list_cohorts(ctx: MoodleContext) -> None:
     """List all cohorts."""
-    svc = CohortService(ctx.get_client())
-    cohorts = svc.list_cohorts()
+    cohorts = ctx.get_moodle().cohorts
     if ctx.json_output:
-        render_json([c.model_dump() for c in cohorts])
+        render_json([c.to_dict() for c in cohorts])
     else:
         rows = [
             {
                 "ID": c.id,
                 "Name": c.name,
-                "ID Number": c.idnumber,
+                "ID Number": c.id_number,
                 "Description": trim(c.description, ctx.trim_messages),
             }
             for c in cohorts
@@ -38,14 +37,14 @@ def list_cohorts(ctx: MoodleContext) -> None:
 
 @cohort.command()
 @click.option("--name", required=True, help="Cohort name")
-@click.option("--idnumber", default="", help="ID number")
+@click.option("--idnumber", "id_number", default="", help="ID number")
 @click.option("--description", default="", help="Description")
 @pass_context
 @handle_errors
-def create(ctx: MoodleContext, name: str, idnumber: str, description: str) -> None:
+def create(ctx: MoodleContext, name: str, id_number: str, description: str) -> None:
     """Create a cohort."""
     svc = CohortService(ctx.get_client())
-    c = svc.create_cohort(name, idnumber=idnumber, description=description)
+    c = svc.create_cohort(name, id_number=id_number, description=description)
     if ctx.json_output:
         render_json(c.model_dump())
     else:

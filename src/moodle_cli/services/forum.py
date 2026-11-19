@@ -2,49 +2,51 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel
+from typing import Annotated
 
-from moodle_cli.services.base import BaseService
+from pydantic import Field
+
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class Forum(BaseModel):
+class ForumRecord(MoodleModel):
     id: int
     course: int = 0
     name: str = ""
     type: str = ""
     intro: str = ""
-    numdiscussions: int = 0
+    num_discussions: Annotated[int, Field(validation_alias="numdiscussions")] = 0
 
 
-class Discussion(BaseModel):
+class DiscussionRecord(MoodleModel):
     id: int
     discussion: int = 0
     name: str = ""
     subject: str = ""
     message: str = ""
-    userid: int = 0
-    userfullname: str = ""
-    timemodified: int = 0
+    user_id: Annotated[int, Field(validation_alias="userid")] = 0
+    user_full_name: Annotated[str, Field(validation_alias="userfullname")] = ""
+    time_modified: Annotated[int, Field(validation_alias="timemodified")] = 0
     # Activity signals returned by mod_forum_get_forum_discussions — previously
     # dropped, which is what blinded "who replied last / how many replies" and
     # broke the standing forum-debt ("ball with you") detection downstream.
     created: int = 0
-    numreplies: int = 0
-    numunread: int = 0
-    usermodified: int = 0
-    usermodifiedfullname: str = ""
+    num_replies: Annotated[int, Field(validation_alias="numreplies")] = 0
+    num_unread: Annotated[int, Field(validation_alias="numunread")] = 0
+    user_modified: Annotated[int, Field(validation_alias="usermodified")] = 0
+    user_modified_full_name: Annotated[str, Field(validation_alias="usermodifiedfullname")] = ""
     pinned: bool = False
     locked: bool = False
 
 
-class Post(BaseModel):
+class Post(MoodleModel):
     id: int
-    discussionid: int = 0
+    discussion_id: Annotated[int, Field(validation_alias="discussionid")] = 0
     # parentid is null on the root post; other id fields can be absent too.
-    parentid: int | None = None
+    parent_id: Annotated[int | None, Field(validation_alias="parentid")] = None
     subject: str = ""
     message: str = ""
-    timecreated: int = 0
+    time_created: Annotated[int, Field(validation_alias="timecreated")] = 0
     author: dict[str, object] = {}
 
     @property
@@ -54,13 +56,13 @@ class Post(BaseModel):
 
 
 class ForumService(BaseService):
-    def list_forums(self, course_id: int) -> list[Forum]:
+    def list_forums(self, course_id: int) -> list[ForumRecord]:
         data = self.call("mod_forum_get_forums_by_courses", courseids=[course_id])
-        return [Forum(**f) for f in data]
+        return [ForumRecord.model_validate(f) for f in data]
 
-    def get_discussions(self, forum_id: int) -> list[Discussion]:
+    def get_discussions(self, forum_id: int) -> list[DiscussionRecord]:
         data = self.call("mod_forum_get_forum_discussions", forumid=forum_id)
-        return [Discussion(**d) for d in data.get("discussions", [])]
+        return [DiscussionRecord.model_validate(d) for d in data.get("discussions", [])]
 
     def get_posts(self, discussion_id: int) -> list[Post]:
         """Every post in a discussion (mod_forum_get_discussion_posts).
@@ -69,7 +71,7 @@ class ForumService(BaseService):
         mod_forum_view_forum_discussion, which is deliberately NOT allowlisted).
         """
         data = self.call("mod_forum_get_discussion_posts", discussionid=discussion_id)
-        return [Post(**p) for p in data.get("posts", [])]
+        return [Post.model_validate(p) for p in data.get("posts", [])]
 
     def add_discussion(self, forum_id: int, subject: str, message: str) -> int:
         """Start a new discussion (write — only reachable via the full `moodle` CLI)."""

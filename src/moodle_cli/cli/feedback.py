@@ -20,12 +20,11 @@ def feedback() -> None:
 @handle_errors
 def list_feedbacks(ctx: MoodleContext, course_id: int) -> None:
     """List feedback activities in a course."""
-    svc = FeedbackService(ctx.get_client())
-    items = svc.list_feedbacks(course_id)
+    items = ctx.get_moodle().course(course_id).feedbacks
     if ctx.json_output:
-        render_json([f.model_dump() for f in items])
+        render_json([f.to_dict() for f in items])
     else:
-        rows = [{"ID": f.id, "Name": f.name, "Anonymous": f.anonymous} for f in items]
+        rows = [{"ID": f.id, "Name": f.name} for f in items]
         render_table(rows, title=f"Feedback activities ({len(rows)})")
 
 
@@ -62,3 +61,19 @@ def non_respondents(ctx: MoodleContext, feedback_id: int) -> None:
     else:
         rows = [{"ID": u.get("userid"), "Name": u.get("fullname", "")} for u in users]
         render_table(rows, title=f"Non-respondents ({len(rows)})")
+
+
+@feedback.command()
+@click.argument("feedback_id", type=int)
+@click.option("--page", default=0, type=int)
+@click.option("--answer", "answers", multiple=True, help="name=value")
+@pass_context
+@handle_errors
+def submit(ctx: MoodleContext, feedback_id: int, page: int, answers: tuple[str, ...]) -> None:
+    """Submit one page of a feedback activity."""
+    payload = dict(item.split("=", 1) for item in answers)
+    result = FeedbackService(ctx.get_client()).process_page(feedback_id, page, payload)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Submitted feedback page {page}.[/green]")

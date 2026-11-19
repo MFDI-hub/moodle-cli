@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-import respx
-from httpx import Response
 
 from moodle_cli.client.exceptions import AuthenticationError, MoodleAPIError
 from moodle_cli.client.http import MoodleHTTPClient, flatten_params
+from tests.http_mock import Response, Router
 
 BASE_URL = "https://moodle.example.com"
 TOKEN = "test-token"
@@ -43,31 +42,31 @@ class TestFlattenParams:
 
 
 class TestMoodleHTTPClient:
-    @respx.mock
-    def test_call_success(self) -> None:
-        respx.post(f"{BASE_URL}/webservice/rest/server.php").mock(
+    def test_call_success(self, mock_http: Router) -> None:
+        mock_http.post(f"{BASE_URL}/webservice/rest/server.php").mock(
             return_value=Response(200, json=[{"id": 1, "name": "Test"}])
         )
         client = MoodleHTTPClient(base_url=BASE_URL, token=TOKEN)
         result = client.call("core_course_get_courses")
         assert result == [{"id": 1, "name": "Test"}]
 
-    @respx.mock
-    def test_call_api_error(self) -> None:
-        respx.post(f"{BASE_URL}/webservice/rest/server.php").mock(
-            return_value=Response(200, json={
-                "exception": "moodle_exception",
-                "errorcode": "invalidtoken",
-                "message": "Invalid token",
-            })
+    def test_call_api_error(self, mock_http: Router) -> None:
+        mock_http.post(f"{BASE_URL}/webservice/rest/server.php").mock(
+            return_value=Response(
+                200,
+                json={
+                    "exception": "moodle_exception",
+                    "errorcode": "invalidtoken",
+                    "message": "Invalid token",
+                },
+            )
         )
         client = MoodleHTTPClient(base_url=BASE_URL, token=TOKEN)
         with pytest.raises(MoodleAPIError, match="Invalid token"):
             client.call("core_webservice_get_site_info")
 
-    @respx.mock
-    def test_call_sends_correct_params(self) -> None:
-        route = respx.post(f"{BASE_URL}/webservice/rest/server.php").mock(
+    def test_call_sends_correct_params(self, mock_http: Router) -> None:
+        route = mock_http.post(f"{BASE_URL}/webservice/rest/server.php").mock(
             return_value=Response(200, json={})
         )
         client = MoodleHTTPClient(base_url=BASE_URL, token=TOKEN)
@@ -78,21 +77,22 @@ class TestMoodleHTTPClient:
         assert "wstoken=test-token" in body
         assert "courseid=42" in body
 
-    @respx.mock
-    def test_authenticate_success(self) -> None:
-        respx.post(f"{BASE_URL}/login/token.php").mock(
+    def test_authenticate_success(self, mock_http: Router) -> None:
+        mock_http.post(f"{BASE_URL}/login/token.php").mock(
             return_value=Response(200, json={"token": "new-token-123"})
         )
         token = MoodleHTTPClient.authenticate(BASE_URL, "admin", "pass123")
         assert token == "new-token-123"
 
-    @respx.mock
-    def test_authenticate_failure(self) -> None:
-        respx.post(f"{BASE_URL}/login/token.php").mock(
-            return_value=Response(200, json={
-                "error": "Invalid login",
-                "errorcode": "invalidlogin",
-            })
+    def test_authenticate_failure(self, mock_http: Router) -> None:
+        mock_http.post(f"{BASE_URL}/login/token.php").mock(
+            return_value=Response(
+                200,
+                json={
+                    "error": "Invalid login",
+                    "errorcode": "invalidlogin",
+                },
+            )
         )
         with pytest.raises(AuthenticationError, match="Invalid login"):
             MoodleHTTPClient.authenticate(BASE_URL, "admin", "wrong")

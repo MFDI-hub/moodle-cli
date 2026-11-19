@@ -7,7 +7,6 @@ import click
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import console, render_json, render_table, trim
 from moodle_cli.services.message import MessageService
-from moodle_cli.services.user import UserService
 
 
 @click.group()
@@ -20,9 +19,7 @@ def message() -> None:
 @handle_errors
 def unread(ctx: MoodleContext) -> None:
     """Number of conversations with unread messages."""
-    client = ctx.get_client()
-    me = UserService(client).get_me()
-    count = MessageService(client).unread_count(me.id)
+    count = ctx.get_moodle().unread_count()
     if ctx.json_output:
         render_json({"unread_conversations": count})
     else:
@@ -47,22 +44,34 @@ def send(ctx: MoodleContext, user_id: int, text: str) -> None:
 @handle_errors
 def list_messages(ctx: MoodleContext, from_user: int) -> None:
     """List recent messages."""
-    client = ctx.get_client()
-    me = UserService(client).get_me()
-    svc = MessageService(client)
-    msgs = svc.get_messages(me.id, user_id_from=from_user)
-    if ctx.json_output:
-        render_json([m.model_dump() for m in msgs])
-    else:
+    api = ctx.get_moodle()
+    if from_user:
+        msgs = MessageService(api.client).get_messages(api.me.id, user_id_from=from_user)
+        payload = [m.model_dump() for m in msgs]
         rows = [
             {
                 "ID": m.id,
-                "From": m.useridfrom,
+                "From": m.user_id_from,
                 "Text": trim(m.text, ctx.trim_messages),
-                "Time": m.timecreated,
+                "Time": m.time_created,
             }
             for m in msgs
         ]
+    else:
+        items = api.messages
+        payload = [m.to_dict() for m in items]
+        rows = [
+            {
+                "ID": m.id,
+                "From": m.from_id,
+                "Text": trim(m.text, ctx.trim_messages),
+                "Time": m.time_created,
+            }
+            for m in items
+        ]
+    if ctx.json_output:
+        render_json(payload)
+    else:
         render_table(rows, title=f"Messages ({len(rows)})")
 
 
@@ -71,15 +80,17 @@ def list_messages(ctx: MoodleContext, from_user: int) -> None:
 @handle_errors
 def conversations(ctx: MoodleContext) -> None:
     """List conversations."""
-    client = ctx.get_client()
-    me = UserService(client).get_me()
-    svc = MessageService(client)
-    convs = svc.get_conversations(me.id)
+    convs = ctx.get_moodle().conversations
     if ctx.json_output:
-        render_json([c.model_dump() for c in convs])
+        render_json([c.to_dict() for c in convs])
     else:
         rows = [
-            {"ID": c.id, "Name": c.name or "(unnamed)", "Members": c.membercount, "Unread": c.unreadcount or 0}
+            {
+                "ID": c.id,
+                "Name": c.name or "(unnamed)",
+                "Members": c.member_count,
+                "Unread": c.unread,
+            }
             for c in convs
         ]
         render_table(rows, title=f"Conversations ({len(rows)})")

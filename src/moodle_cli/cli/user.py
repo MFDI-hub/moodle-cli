@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from moodle_cli._utils import parse_customfields
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import console, render_json, render_table
 from moodle_cli.services.user import UserService
@@ -27,7 +28,7 @@ def profiles(ctx: MoodleContext, course_id: int, user_ids: tuple[int, ...]) -> N
         render_json([u.model_dump() for u in users])
     else:
         rows = [
-            {"ID": u.id, "Full Name": u.fullname, "Email": u.email, "Dept": u.department}
+            {"ID": u.id, "Full Name": u.full_name, "Email": u.email, "Dept": u.department}
             for u in users
         ]
         render_table(rows, title=f"Profiles ({len(rows)})")
@@ -38,12 +39,11 @@ def profiles(ctx: MoodleContext, course_id: int, user_ids: tuple[int, ...]) -> N
 @handle_errors
 def me(ctx: MoodleContext) -> None:
     """Show current user information."""
-    svc = UserService(ctx.get_client())
-    u = svc.get_me()
+    u = ctx.get_moodle().me
     if ctx.json_output:
-        render_json(u.model_dump())
+        render_json(u.to_dict())
     else:
-        console.print(f"[bold]{u.fullname}[/bold]")
+        console.print(f"[bold]{u.full_name}[/bold]")
         console.print(f"ID:       {u.id}")
         console.print(f"Username: {u.username}")
 
@@ -60,7 +60,10 @@ def list_users(ctx: MoodleContext, key: str, value: str) -> None:
     if ctx.json_output:
         render_json([u.model_dump() for u in users])
     else:
-        rows = [{"ID": u.id, "Username": u.username, "Full Name": u.fullname, "Email": u.email} for u in users]
+        rows = [
+            {"ID": u.id, "Username": u.username, "Full Name": u.full_name, "Email": u.email}
+            for u in users
+        ]
         render_table(rows, title=f"Users ({len(rows)})")
 
 
@@ -75,7 +78,7 @@ def get(ctx: MoodleContext, user_id: int) -> None:
     if ctx.json_output:
         render_json(u.model_dump())
     else:
-        console.print(f"[bold]{u.fullname}[/bold]")
+        console.print(f"[bold]{u.full_name}[/bold]")
         console.print(f"ID:       {u.id}")
         console.print(f"Username: {u.username}")
         console.print(f"Email:    {u.email}")
@@ -83,16 +86,18 @@ def get(ctx: MoodleContext, user_id: int) -> None:
 
 @user.command()
 @click.option("--username", required=True)
-@click.option("--firstname", required=True)
-@click.option("--lastname", required=True)
+@click.option("--firstname", "first_name", required=True)
+@click.option("--lastname", "last_name", required=True)
 @click.option("--email", required=True)
 @click.option("--password", required=True, prompt=True, hide_input=True)
 @pass_context
 @handle_errors
-def create(ctx: MoodleContext, username: str, firstname: str, lastname: str, email: str, password: str) -> None:
+def create(
+    ctx: MoodleContext, username: str, first_name: str, last_name: str, email: str, password: str
+) -> None:
     """Create a new user."""
     svc = UserService(ctx.get_client())
-    u = svc.create_user(username, firstname, lastname, email, password)
+    u = svc.create_user(username, first_name, last_name, email, password)
     if ctx.json_output:
         render_json(u.model_dump())
     else:
@@ -101,22 +106,30 @@ def create(ctx: MoodleContext, username: str, firstname: str, lastname: str, ema
 
 @user.command()
 @click.argument("user_id", type=int)
-@click.option("--firstname", default=None)
-@click.option("--lastname", default=None)
+@click.option("--firstname", "first_name", default=None)
+@click.option("--lastname", "last_name", default=None)
 @click.option("--email", default=None)
+@click.option("--customfield", multiple=True, help="shortname=value")
 @pass_context
 @handle_errors
-def update(ctx: MoodleContext, user_id: int, firstname: str | None, lastname: str | None, email: str | None) -> None:
+def update(
+    ctx: MoodleContext,
+    user_id: int,
+    first_name: str | None,
+    last_name: str | None,
+    email: str | None,
+    customfield: tuple[str, ...],
+) -> None:
     """Update a user."""
     svc = UserService(ctx.get_client())
     kwargs = {}
-    if firstname is not None:
-        kwargs["firstname"] = firstname
-    if lastname is not None:
-        kwargs["lastname"] = lastname
+    if first_name is not None:
+        kwargs["firstname"] = first_name
+    if last_name is not None:
+        kwargs["lastname"] = last_name
     if email is not None:
         kwargs["email"] = email
-    svc.update_user(user_id, **kwargs)
+    svc.update_user(user_id, custom_fields=parse_customfields(customfield) or None, **kwargs)
     console.print(f"[green]Updated user {user_id}.[/green]")
 
 

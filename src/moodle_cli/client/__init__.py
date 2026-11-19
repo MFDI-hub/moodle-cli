@@ -5,8 +5,10 @@ from moodle_cli.client.exceptions import (
     ConfigError,
     ConnectionError,
     MoodleAPIError,
+    MoodleConnectionError,
     MoodleError,
     ProfileNotFoundError,
+    ReadOnlyViolation,
 )
 from moodle_cli.client.http import MoodleHTTPClient
 
@@ -15,7 +17,9 @@ __all__ = [
     "ConfigError",
     "ConnectionError",
     "MoodleAPIError",
+    "MoodleConnectionError",
     "MoodleError",
     "MoodleHTTPClient",
     "ProfileNotFoundError",
+    "ReadOnlyViolation",
 ]

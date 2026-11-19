@@ -2,23 +2,23 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import Field
 
-from moodle_cli.services.base import BaseService
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class GradeItem(BaseModel):
-    itemname: str | None = None
+class GradeItem(MoodleModel):
+    item_name: Annotated[str | None, Field(validation_alias="itemname")] = None
     grade: str | None = None
-    grademax: float = 0
-    grademin: float = 0
+    grade_max: Annotated[float, Field(validation_alias="grademax")] = 0
+    grade_min: Annotated[float, Field(validation_alias="grademin")] = 0
     feedback: str = ""
 
 
-class GradeReport(BaseModel):
-    usergrades: list[dict[str, Any]] = []
+class GradeReport(MoodleModel):
+    user_grades: Annotated[list[dict[str, Any]], Field(validation_alias="usergrades")] = []
 
 
 class GradeService(BaseService):
@@ -30,7 +30,7 @@ class GradeService(BaseService):
         items = []
         for ug in data.get("usergrades", []):
             for gi in ug.get("gradeitems", []):
-                items.append(GradeItem(**gi))
+                items.append(GradeItem.model_validate(gi))
         return items
 
     def get_report(self, course_id: int, user_id: int | None = None) -> GradeReport:
@@ -38,7 +38,7 @@ class GradeService(BaseService):
         if user_id is not None:
             params["userid"] = user_id
         data = self.call("gradereport_user_get_grade_items", **params)
-        return GradeReport(**data)
+        return GradeReport.model_validate(data)
 
     def get_overview(self) -> list[dict[str, Any]]:
         """Current user's final grade in each of their courses.

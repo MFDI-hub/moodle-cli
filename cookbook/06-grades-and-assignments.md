@@ -42,7 +42,7 @@ moodle-readonly -p default assign status <assignment_id> --user-id <student_id>
 
 ```bash
 moodle-readonly -p default --json assign submissions <assignment_id> | jq -r '
-  .[] | select(.status=="submitted" and .gradingstatus=="notgraded") | .userid'
+  .[] | select(.status=="submitted" and .grading_status=="notgraded") | .user_id'
 ```
 
 ### Who hasn't submitted
@@ -52,7 +52,7 @@ moodle-readonly -p default --json assign submissions <assignment_id> | jq -r '
 C=<course_id>; A=<assignment_id>
 comm -23 \
   <(moodle-readonly -p default --json enrol list-users "$C" | jq -r '.[] | select(.roles[].shortname=="student") | .id' | sort -u) \
-  <(moodle-readonly -p default --json assign submissions "$A" | jq -r '.[] | select(.status=="submitted") | .userid' | sort -u)
+  <(moodle-readonly -p default --json assign submissions "$A" | jq -r '.[] | select(.status=="submitted") | .user_id' | sort -u)
 ```
 
 ## Quizzes

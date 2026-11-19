@@ -8,6 +8,7 @@ from typing import Any
 from rich.table import Table
 
 from moodle_cli.output.console import console
+from moodle_cli.output.encode import machine_format, write_machine
 
 
 def render_table(
@@ -15,7 +16,11 @@ def render_table(
     columns: list[str] | None = None,
     title: str | None = None,
 ) -> None:
-    """Render a list of dicts as a Rich table."""
+    """Render a list of dicts as a Rich table, or as JSON/YAML/CSV when asked."""
+    if machine_format():
+        write_machine(list(rows))
+        return
+
     if not rows:
         console.print("[dim]No results.[/dim]")
         return

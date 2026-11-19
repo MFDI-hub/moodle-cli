@@ -32,9 +32,10 @@ from __future__ import annotations
 import urllib.parse
 from typing import Any
 
-import httpx
+from curl_cffi import Session
+from curl_cffi.requests.exceptions import HTTPError, RequestException
 
-from moodle_cli.client.exceptions import AuthenticationError, ConnectionError
+from moodle_cli.exceptions import AuthenticationError, MoodleConnectionError
 
 # The official Moodle app self-identifies with a MoodleMobile User-Agent. Without
 # it, tool_mobile_get_tokens_for_qr_login is rejected with the `apprequired` error.
@@ -62,9 +63,7 @@ def parse_moodlemobile_uri(uri: str) -> tuple[str, str, str]:
     key = parsed.get("qrlogin", [""])[0]
     userid = parsed.get("userid", [""])[0]
     if not key or not userid:
-        raise AuthenticationError(
-            f"Could not find qrlogin/userid in QR payload: {query}"
-        )
+        raise AuthenticationError(f"Could not find qrlogin/userid in QR payload: {query}")
     return site_url, key, userid
 
 
@@ -76,8 +75,8 @@ def decode_qr_image(path: str) -> str:
     and dense.
     """
     try:
-        from PIL import Image  # type: ignore[import-not-found]
-        from pyzbar.pyzbar import decode  # type: ignore[import-not-found]
+        from PIL import Image
+        from pyzbar.pyzbar import decode
     except ImportError as exc:  # pragma: no cover - depends on optional extra
         raise AuthenticationError(
             "QR image decoding needs the optional 'qr' extra:\n"
@@ -109,7 +108,7 @@ def exchange_qr_login(
 
     Raises :class:`AuthenticationError` on a Moodle-level error (e.g. an expired
     or already-used key -> ``invalidkey``; a missing app User-Agent ->
-    ``apprequired``), and :class:`ConnectionError` on transport failure.
+    ``apprequired``), and :class:`MoodleConnectionError` on transport failure.
     """
     base = site_url.rstrip("/")
     endpoint = f"{base}/lib/ajax/service-nologin.php?info=tool_mobile_get_tokens_for_qr_login"
@@ -121,17 +120,18 @@ def exchange_qr_login(
         }
     ]
     try:
-        resp = httpx.post(
-            endpoint,
-            json=payload,
-            headers={"User-Agent": MOODLE_APP_USER_AGENT},
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-    except httpx.ConnectError as exc:
-        raise ConnectionError(f"Could not connect to {base}: {exc}") from exc
-    except httpx.HTTPStatusError as exc:
-        raise ConnectionError(f"HTTP {exc.response.status_code} from {base}") from exc
+        with Session(impersonate="firefox155", timeout=timeout) as session:
+            resp = session.post(
+                endpoint,
+                json=payload,
+                headers={"User-Agent": MOODLE_APP_USER_AGENT},
+            )
+            resp.raise_for_status()
+    except HTTPError as exc:
+        status = exc.response.status_code if exc.response is not None else "error"
+        raise MoodleConnectionError(f"HTTP {status} from {base}") from exc
+    except RequestException as exc:
+        raise MoodleConnectionError(f"Could not connect to {base}: {exc}") from exc
 
     data = resp.json()
     if not isinstance(data, list) or not data:

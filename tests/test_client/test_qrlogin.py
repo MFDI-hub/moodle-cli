@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import pytest
-import respx
-from httpx import Response
 
 from moodle_cli.client.exceptions import AuthenticationError
 from moodle_cli.client.qrlogin import (
@@ -12,6 +10,7 @@ from moodle_cli.client.qrlogin import (
     exchange_qr_login,
     parse_moodlemobile_uri,
 )
+from tests.http_mock import Response, Router
 
 SITE = "https://moodle.example.com"
 AJAX = f"{SITE}/lib/ajax/service-nologin.php"
@@ -42,9 +41,8 @@ class TestParseUri:
 
 
 class TestExchange:
-    @respx.mock
-    def test_success(self) -> None:
-        route = respx.post(AJAX).mock(
+    def test_success(self, mock_http: Router) -> None:
+        route = mock_http.post(AJAX).mock(
             return_value=Response(
                 200,
                 json=[{"error": False, "data": {"token": "TOK", "privatetoken": "PRIV"}}],
@@ -56,12 +54,16 @@ class TestExchange:
         # The app User-Agent is required by the server; assert we send it.
         assert route.calls.last.request.headers["user-agent"] == MOODLE_APP_USER_AGENT
 
-    @respx.mock
-    def test_invalidkey_is_friendly(self) -> None:
-        respx.post(AJAX).mock(
+    def test_invalidkey_is_friendly(self, mock_http: Router) -> None:
+        mock_http.post(AJAX).mock(
             return_value=Response(
                 200,
-                json=[{"error": True, "exception": {"errorcode": "invalidkey", "message": "Invalid key"}}],
+                json=[
+                    {
+                        "error": True,
+                        "exception": {"errorcode": "invalidkey", "message": "Invalid key"},
+                    }
+                ],
             )
         )
         with pytest.raises(AuthenticationError) as exc:
@@ -69,16 +71,12 @@ class TestExchange:
         assert exc.value.error_code == "invalidkey"
         assert "single-use" in str(exc.value)
 
-    @respx.mock
-    def test_no_token_in_data_raises(self) -> None:
-        respx.post(AJAX).mock(
-            return_value=Response(200, json=[{"error": False, "data": {}}])
-        )
+    def test_no_token_in_data_raises(self, mock_http: Router) -> None:
+        mock_http.post(AJAX).mock(return_value=Response(200, json=[{"error": False, "data": {}}]))
         with pytest.raises(AuthenticationError):
             exchange_qr_login(SITE, "k", 42)
 
-    @respx.mock
-    def test_unexpected_shape_raises(self) -> None:
-        respx.post(AJAX).mock(return_value=Response(200, json={"not": "a list"}))
+    def test_unexpected_shape_raises(self, mock_http: Router) -> None:
+        mock_http.post(AJAX).mock(return_value=Response(200, json={"not": "a list"}))
         with pytest.raises(AuthenticationError):
             exchange_qr_login(SITE, "k", 42)

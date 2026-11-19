@@ -97,8 +97,10 @@ uv run pytest -n auto -k name  # parallel, filtered
 The `Makefile` wraps the common combinations (`make install`, `make lint`, `make test`,
 `make docs-build`), and `devtools/lint.py` runs the whole lint chain in one go.
 
-`ty` is pre-1.0. If a third-party package ships no type information, prefer
-`[tool.ty.analysis] allowed-unresolved-imports` over sprinkling `# type: ignore`.
+`ty` is pinned to an exact preview (`ty==0.0.104` in `pyproject.toml`). If a
+third-party package ships no type information, prefer
+`[tool.ty.analysis] allowed-unresolved-imports` over sprinkling `# ty: ignore`.
+Inline suppressions use `# ty: ignore[rule-name]` (not `# type: ignore`).
 Run `uv run ty check --output-format concise` to see rule names for `[tool.ty.rules]`.
 
 ## Sync chosen files

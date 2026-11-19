@@ -24,7 +24,9 @@ def assign(ctx: MoodleContext, role_id: int, user_id: int, context_id: int) -> N
     """Assign a role to a user in a context."""
     svc = RoleService(ctx.get_client())
     svc.assign_role(role_id, user_id, context_id)
-    console.print(f"[green]Assigned role {role_id} to user {user_id} in context {context_id}.[/green]")
+    console.print(
+        f"[green]Assigned role {role_id} to user {user_id} in context {context_id}.[/green]"
+    )
 
 
 @role.command()
@@ -37,4 +39,6 @@ def unassign(ctx: MoodleContext, role_id: int, user_id: int, context_id: int) ->
     """Unassign a role from a user in a context."""
     svc = RoleService(ctx.get_client())
     svc.unassign_role(role_id, user_id, context_id)
-    console.print(f"[green]Unassigned role {role_id} from user {user_id} in context {context_id}.[/green]")
+    console.print(
+        f"[green]Unassigned role {role_id} from user {user_id} in context {context_id}.[/green]"
+    )

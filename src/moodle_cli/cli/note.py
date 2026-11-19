@@ -8,7 +8,6 @@ import click
 
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import render_json, render_table, trim
-from moodle_cli.services.note import NoteService
 
 
 @click.group()
@@ -22,17 +21,16 @@ def note() -> None:
 @handle_errors
 def course(ctx: MoodleContext, course_id: int) -> None:
     """List notes recorded against users in a course."""
-    svc = NoteService(ctx.get_client())
-    notes = svc.course_notes(course_id)
+    notes = ctx.get_moodle().course(course_id).notes
     if ctx.json_output:
-        render_json(notes)
+        render_json([n.to_dict() for n in notes])
     else:
         rows = [
             {
-                "ID": n.get("id"),
-                "User": n.get("userid"),
+                "ID": n.id,
+                "User": n.user_id,
                 "Note": trim(
-                    re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", n.get("content", ""))).strip(),
+                    re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", n.content)).strip(),
                     ctx.trim_messages,
                 ),
             }

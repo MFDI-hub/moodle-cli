@@ -27,12 +27,14 @@ repos:
     hooks:
       # These read their paths from pyproject.toml, so no file list is passed:
       # a hardcoded list silently drifts from [tool.ty.src] / [tool.vulture].
+      # Pin lives in pyproject.toml / uv.lock (ty==0.0.104), not a second
+      # additional_dependencies copy that can drift from the lockfile.
       - id: ty
         name: ty type check
         entry: uv run ty check
         language: system
         pass_filenames: false
-        types: [python]
+        types_or: [python, pyi]
 
       - id: vulture
         name: vulture dead code

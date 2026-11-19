@@ -182,3 +182,96 @@ def lesson_pages(ctx: MoodleContext, lesson_id: int) -> None:
                 }
             )
         render_table(rows, title=f"Lesson pages ({len(rows)})")
+
+
+@workshop.command()
+@click.argument("workshop_id", type=int)
+@click.option("--title", required=True)
+@click.option("--content", required=True)
+@pass_context
+@handle_errors
+def submit(ctx: MoodleContext, workshop_id: int, title: str, content: str) -> None:
+    """Submit work to a workshop."""
+    result = WorkshopService(ctx.get_client()).add_submission(workshop_id, title, content)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print("[green]Submitted to workshop.[/green]")
+
+
+@glossary.command("add")
+@click.argument("glossary_id", type=int)
+@click.option("--concept", required=True)
+@click.option("--definition", required=True)
+@pass_context
+@handle_errors
+def glossary_add(ctx: MoodleContext, glossary_id: int, concept: str, definition: str) -> None:
+    """Add a glossary entry."""
+    result = GlossaryService(ctx.get_client()).add_entry(glossary_id, concept, definition)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Added '{concept}'.[/green]")
+
+
+@database.command("add")
+@click.argument("database_id", type=int)
+@click.option("--field", "fields", multiple=True, required=True, help="fieldid=value")
+@pass_context
+@handle_errors
+def database_add(ctx: MoodleContext, database_id: int, fields: tuple[str, ...]) -> None:
+    """Add a database activity entry."""
+    data = []
+    for item in fields:
+        fieldid, value = item.split("=", 1)
+        data.append({"fieldid": int(fieldid), "value": value})
+    result = DatabaseService(ctx.get_client()).add_entry(database_id, data)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print("[green]Added database entry.[/green]")
+
+
+@wiki.command()
+@click.option("--subwiki-id", required=True, type=int)
+@click.option("--title", required=True)
+@click.option("--content", required=True)
+@pass_context
+@handle_errors
+def create(ctx: MoodleContext, subwiki_id: int, title: str, content: str) -> None:
+    """Create a wiki page."""
+    result = WikiService(ctx.get_client()).new_page(subwiki_id, title, content)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Created wiki page '{title}'.[/green]")
+
+
+@wiki.command()
+@click.argument("page_id", type=int)
+@click.option("--content", required=True)
+@pass_context
+@handle_errors
+def edit(ctx: MoodleContext, page_id: int, content: str) -> None:
+    """Edit a wiki page without taking the edit lock."""
+    result = WikiService(ctx.get_client()).edit_page(page_id, content)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Updated wiki page {page_id}.[/green]")
+
+
+@lesson.command()
+@click.argument("lesson_id", type=int)
+@click.argument("page_id", type=int)
+@click.option("--answer", "answers", multiple=True, help="name=value")
+@pass_context
+@handle_errors
+def attempt(ctx: MoodleContext, lesson_id: int, page_id: int, answers: tuple[str, ...]) -> None:
+    """Answer a lesson page."""
+    payload = dict(item.split("=", 1) for item in answers)
+    result = LessonService(ctx.get_client()).process_page(lesson_id, page_id, payload)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Processed lesson page {page_id}.[/green]")

@@ -7,7 +7,6 @@ import click
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import fmt_ts, render_json, render_table
 from moodle_cli.services.badge import BadgeService
-from moodle_cli.services.user import UserService
 
 
 @click.group()
@@ -22,16 +21,26 @@ def badge() -> None:
 @handle_errors
 def user_badges(ctx: MoodleContext, user_id: int | None, course_id: int | None) -> None:
     """List a user's awarded badges."""
-    client = ctx.get_client()
+    api = ctx.get_moodle()
+    if user_id is None and course_id is None:
+        badges = api.badges
+        if ctx.json_output:
+            render_json([b.to_dict() for b in badges])
+        else:
+            rows = [
+                {"ID": b.id, "Name": b.name, "Issued": fmt_ts(b.date_issued), "Issuer": b.issuer}
+                for b in badges
+            ]
+            render_table(rows, title=f"Badges ({len(rows)})")
+        return
     if user_id is None:
-        user_id = UserService(client).get_me().id
-    svc = BadgeService(client)
-    badges = svc.user_badges(user_id, course_id)
+        user_id = api.me.id
+    items = BadgeService(api.client).user_badges(user_id, course_id)
     if ctx.json_output:
-        render_json([b.model_dump() for b in badges])
+        render_json([b.model_dump() for b in items])
     else:
         rows = [
-            {"ID": b.id, "Name": b.name, "Issued": fmt_ts(b.dateissued), "Issuer": b.issuername}
-            for b in badges
+            {"ID": b.id, "Name": b.name, "Issued": fmt_ts(b.date_issued), "Issuer": b.issuer_name}
+            for b in items
         ]
         render_table(rows, title=f"Badges ({len(rows)})")

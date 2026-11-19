@@ -6,6 +6,7 @@ import re
 
 import click
 
+from moodle_cli.api.models import Discussion, Forum
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import console, fmt_ts, render_json, render_table, trim
 from moodle_cli.services.forum import ForumService
@@ -29,10 +30,9 @@ def forum() -> None:
 @handle_errors
 def list_forums(ctx: MoodleContext, course_id: int) -> None:
     """List forums in a course."""
-    svc = ForumService(ctx.get_client())
-    forums = svc.list_forums(course_id)
+    forums = ctx.get_moodle().course(course_id).forums
     if ctx.json_output:
-        render_json([f.model_dump() for f in forums])
+        render_json([f.to_dict() for f in forums])
     else:
         rows = [{"ID": f.id, "Name": f.name, "Type": f.type} for f in forums]
         render_table(rows, title=f"Forums ({len(rows)})")
@@ -44,21 +44,19 @@ def list_forums(ctx: MoodleContext, course_id: int) -> None:
 @handle_errors
 def discussions(ctx: MoodleContext, forum_id: int) -> None:
     """List discussions in a forum (with reply count + who posted last)."""
-    svc = ForumService(ctx.get_client())
-    discs = svc.get_discussions(forum_id)
+    api = ctx.get_moodle()
+    discs = Forum(_api=api, id=forum_id, course_id=0, name="").discussions
     if ctx.json_output:
-        render_json([d.model_dump() for d in discs])
+        render_json([d.to_dict() for d in discs])
     else:
-        # Moodle returns `id` = first-post id and `discussion` = discussion id.
-        # `forum posts` needs the *discussion* id, so surface that as the chainable ID.
         rows = [
             {
-                "Disc ID": d.discussion or d.id,
-                "Subject": d.subject or d.name,
-                "Started by": d.userfullname,
-                "Replies": d.numreplies,
-                "Last post": fmt_ts(d.timemodified),
-                "Last by": d.usermodifiedfullname or "-",
+                "Disc ID": d.id,
+                "Subject": d.subject,
+                "Started by": d.author,
+                "Replies": d.replies,
+                "Last post": fmt_ts(d.time_modified),
+                "Last by": d.last_author or "-",
             }
             for d in discs
         ]
@@ -71,18 +69,18 @@ def discussions(ctx: MoodleContext, forum_id: int) -> None:
 @handle_errors
 def posts(ctx: MoodleContext, discussion_id: int) -> None:
     """List every post in a discussion (author + time, oldest first)."""
-    svc = ForumService(ctx.get_client())
-    items = svc.get_posts(discussion_id)
+    api = ctx.get_moodle()
+    items = Discussion(_api=api, id=discussion_id, forum_id=0, subject="").posts
     if ctx.json_output:
-        render_json([p.model_dump() for p in items])
+        render_json(items)
     else:
         rows = [
             {
-                "ID": p.id,
-                "When": fmt_ts(p.timecreated),
-                "Author": p.author_name,
-                "Subject": p.subject,
-                "Message": trim(_plain(p.message), ctx.trim_messages),
+                "ID": p.get("id"),
+                "When": fmt_ts(int(p.get("time_created") or 0)),
+                "Author": p.get("author_name") or "",
+                "Subject": p.get("subject") or "",
+                "Message": trim(_plain(str(p.get("message") or "")), ctx.trim_messages),
             }
             for p in items
         ]

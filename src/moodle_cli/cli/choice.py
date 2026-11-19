@@ -5,7 +5,7 @@ from __future__ import annotations
 import click
 
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
-from moodle_cli.output import render_json, render_table
+from moodle_cli.output import console, render_json, render_table
 from moodle_cli.services.choice import ChoiceService
 
 
@@ -20,10 +20,9 @@ def choice() -> None:
 @handle_errors
 def list_choices(ctx: MoodleContext, course_id: int) -> None:
     """List choice activities in a course."""
-    svc = ChoiceService(ctx.get_client())
-    items = svc.list_choices(course_id)
+    items = ctx.get_moodle().course(course_id).choices
     if ctx.json_output:
-        render_json([c.model_dump() for c in items])
+        render_json([c.to_dict() for c in items])
     else:
         rows = [{"ID": c.id, "Name": c.name} for c in items]
         render_table(rows, title=f"Choices ({len(rows)})")
@@ -41,7 +40,20 @@ def results(ctx: MoodleContext, choice_id: int) -> None:
         render_json(options)
     else:
         rows = [
-            {"Option": o.get("text", ""), "Count": len(o.get("userresponses", []))}
-            for o in options
+            {"Option": o.get("text", ""), "Count": len(o.get("userresponses", []))} for o in options
         ]
         render_table(rows, title=f"Results ({len(rows)} options)")
+
+
+@choice.command()
+@click.argument("choice_id", type=int)
+@click.option("--response", "responses", type=int, multiple=True, required=True)
+@pass_context
+@handle_errors
+def answer(ctx: MoodleContext, choice_id: int, responses: tuple[int, ...]) -> None:
+    """Submit a choice response."""
+    result = ChoiceService(ctx.get_client()).submit(choice_id, list(responses))
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Recorded choice {choice_id}.[/green]")

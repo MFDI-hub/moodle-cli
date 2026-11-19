@@ -7,6 +7,7 @@ import click
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import console, render_json, render_table
 from moodle_cli.services.assign import AssignService
+from moodle_cli.services.file import FileService
 
 
 @click.group()
@@ -58,13 +59,16 @@ def status(ctx: MoodleContext, assign_id: int, user_id: int | None) -> None:
 @handle_errors
 def list_assignments(ctx: MoodleContext, course_id: tuple[int, ...]) -> None:
     """List assignments."""
-    svc = AssignService(ctx.get_client())
-    ids = list(course_id) if course_id else None
-    assignments = svc.list_assignments(ids)
+    api = ctx.get_moodle()
+    ids = list(course_id) if course_id else [course.id for course in api.courses]
+    assignments = [item for cid in ids for item in api.course(cid).assignments]
     if ctx.json_output:
-        render_json([a.model_dump() for a in assignments])
+        render_json([a.to_dict() for a in assignments])
     else:
-        rows = [{"ID": a.id, "Course": a.course, "Name": a.name, "Due": a.duedate} for a in assignments]
+        rows = [
+            {"ID": a.id, "Course": a.course_id, "Name": a.name, "Due": a.due_date}
+            for a in assignments
+        ]
         render_table(rows, title=f"Assignments ({len(rows)})")
 
 
@@ -79,7 +83,10 @@ def submissions(ctx: MoodleContext, assignment_ids: tuple[int, ...]) -> None:
     if ctx.json_output:
         render_json([s.model_dump() for s in subs])
     else:
-        rows = [{"ID": s.id, "User": s.userid, "Status": s.status, "Grading": s.gradingstatus} for s in subs]
+        rows = [
+            {"ID": s.id, "User": s.user_id, "Status": s.status, "Grading": s.grading_status}
+            for s in subs
+        ]
         render_table(rows, title=f"Submissions ({len(rows)})")
 
 
@@ -97,6 +104,12 @@ def submissions(ctx: MoodleContext, assignment_ids: tuple[int, ...]) -> None:
         "non-workflow assignment is rejected by Moodle."
     ),
 )
+@click.option(
+    "--criterion",
+    "criteria",
+    multiple=True,
+    help="Rubric criterion as id=levelid (repeatable).",
+)
 @pass_context
 @handle_errors
 def grade(
@@ -106,8 +119,67 @@ def grade(
     grade_value: float,
     feedback: str,
     workflow_state: str,
+    criteria: tuple[str, ...],
 ) -> None:
     """Grade a submission."""
     svc = AssignService(ctx.get_client())
-    svc.grade_submission(assignment_id, user_id, grade_value, feedback, workflow_state)
-    console.print(f"[green]Graded user {user_id} on assignment {assignment_id}: {grade_value}[/green]")
+    advanced = None
+    if criteria:
+        items = {}
+        for pair in criteria:
+            cid, level = pair.split("=", 1)
+            items[cid] = {"levelid": int(level)}
+        advanced = {"criteria": items}
+    svc.grade_submission(
+        assignment_id, user_id, grade_value, feedback, workflow_state, advanced_grading=advanced
+    )
+    console.print(
+        f"[green]Graded user {user_id} on assignment {assignment_id}: {grade_value}[/green]"
+    )
+
+
+@assign.command()
+@click.option("--assignment-id", required=True, type=int)
+@click.option("--onlinetext", default="")
+@click.option("--file", "files", multiple=True, type=click.Path(exists=True, dir_okay=False))
+@pass_context
+@handle_errors
+def save(ctx: MoodleContext, assignment_id: int, onlinetext: str, files: tuple[str, ...]) -> None:
+    """Save a draft submission (text and/or files)."""
+    plugin_data: dict[str, object] = {}
+    if onlinetext:
+        plugin_data["onlinetext_editor"] = {"text": onlinetext, "format": 1, "itemid": 0}
+    if files:
+        uploaded = FileService(ctx.get_client()).upload(files[0])
+        itemid = 0
+        if isinstance(uploaded, list) and uploaded:
+            itemid = int(uploaded[0].get("itemid") or 0)
+        plugin_data["files_filemanager"] = itemid
+    result = AssignService(ctx.get_client()).save_submission(assignment_id, plugin_data)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Saved submission on assignment {assignment_id}.[/green]")
+
+
+@assign.command()
+@click.option("--assignment-id", required=True, type=int)
+@pass_context
+@handle_errors
+def submit(ctx: MoodleContext, assignment_id: int) -> None:
+    """Submit the saved assignment for grading."""
+    result = AssignService(ctx.get_client()).submit_for_grading(assignment_id)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Submitted assignment {assignment_id}.[/green]")
+
+
+@assign.command("rubric")
+@click.argument("cmid", type=int)
+@pass_context
+@handle_errors
+def rubric(ctx: MoodleContext, cmid: int) -> None:
+    """Show rubric or marking-guide definitions for an assignment."""
+    data = AssignService(ctx.get_client()).grading_definitions(cmid)
+    render_json(data) if ctx.json_output else console.print(data)

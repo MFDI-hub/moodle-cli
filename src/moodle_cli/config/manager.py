@@ -9,10 +9,41 @@ from typing import Any
 import tomli_w
 from pydantic import BaseModel
 
-from moodle_cli.client.exceptions import ConfigError, ProfileNotFoundError
+from moodle_cli.exceptions import ConfigError, ProfileNotFoundError
 
 DEFAULT_CONFIG_DIR = Path.home() / ".config" / "moodle-cli"
 DEFAULT_CONFIG_FILE = DEFAULT_CONFIG_DIR / "config.toml"
+
+
+class NotifySettings(BaseModel):
+    """Optional destinations for sync notifications."""
+
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+    discord_webhook: str = ""
+    ntfy_url: str = ""
+    ntfy_topic: str = ""
+    mail_host: str = ""
+    mail_port: int = 587
+    mail_username: str = ""
+    mail_password: str = ""
+    mail_from: str = ""
+    mail_to: str = ""
+    xmpp_jid: str = ""
+    xmpp_password: str = ""
+    xmpp_to: str = ""
+
+
+class SyncSettings(BaseModel):
+    """Saved options for ``moodle course sync`` / ``moodle sync config``."""
+
+    dest: str = ""
+    course_ids: list[int] = []
+    folder_names: dict[str, str] = {}
+    include_visible: bool = False
+    submissions: bool = True
+    external: bool = False
+    notify: bool = False
 
 
 class Profile(BaseModel):
@@ -21,6 +52,11 @@ class Profile(BaseModel):
     url: str
     username: str
     service: str = "moodle_mobile_app"
+    # Playwright storage-state JSON. When set, the CLI uses that browser session
+    # instead of a web-service token.
+    storage_state: str = ""
+    notify: NotifySettings = NotifySettings()
+    sync: SyncSettings = SyncSettings()
 
 
 class Config(BaseModel):
@@ -43,7 +79,7 @@ class ConfigManager:
         if not self.path.exists():
             return Config()
         try:
-            with open(self.path, "rb") as f:
+            with self.path.open("rb") as f:
                 raw = tomllib.load(f)
         except Exception as exc:
             raise ConfigError(f"Failed to read config: {exc}") from exc
@@ -59,12 +95,13 @@ class ConfigManager:
         self._ensure_dir()
         data: dict[str, Any] = {
             "default_profile": config.default_profile,
-            "profiles": {
-                name: prof.model_dump() for name, prof in config.profiles.items()
-            },
+            "profiles": {name: prof.model_dump() for name, prof in config.profiles.items()},
         }
-        with open(self.path, "wb") as f:
-            tomli_w.dump(data, f)
+        try:
+            with self.path.open("wb") as f:
+                tomli_w.dump(data, f)
+        except OSError as exc:
+            raise ConfigError(f"Failed to write config: {exc}") from exc
 
     def get_profile(self, name: str | None = None) -> tuple[str, Profile]:
         config = self.load()
@@ -103,6 +140,5 @@ class ConfigManager:
     def list_profiles(self) -> list[tuple[str, Profile, bool]]:
         config = self.load()
         return [
-            (name, prof, name == config.default_profile)
-            for name, prof in config.profiles.items()
+            (name, prof, name == config.default_profile) for name, prof in config.profiles.items()
         ]

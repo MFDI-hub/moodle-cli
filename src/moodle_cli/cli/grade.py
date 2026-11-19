@@ -70,12 +70,22 @@ def table(ctx: MoodleContext, course_id: int, user_id: int | None) -> None:
 @handle_errors
 def get(ctx: MoodleContext, course_id: int, user_id: int | None) -> None:
     """Get grade items for a course."""
+    if user_id is None:
+        items = ctx.get_moodle().course(course_id).grades
+        if ctx.json_output:
+            render_json([i.to_dict() for i in items])
+        else:
+            rows = [{"Item": i.name, "Grade": i.grade, "Max": i.grade_max} for i in items]
+            render_table(rows, title="Grade Items")
+        return
     svc = GradeService(ctx.get_client())
     items = svc.get_grades(course_id, user_id)
     if ctx.json_output:
         render_json([i.model_dump() for i in items])
     else:
-        rows = [{"Item": i.itemname or "", "Grade": i.grade or "", "Max": i.grademax} for i in items]
+        rows = [
+            {"Item": i.item_name or "", "Grade": i.grade or "", "Max": i.grade_max} for i in items
+        ]
         render_table(rows, title="Grade Items")
 
 
@@ -91,12 +101,17 @@ def report(ctx: MoodleContext, course_id: int, user_id: int | None) -> None:
     if ctx.json_output:
         render_json(rpt.model_dump())
     else:
-        for ug in rpt.usergrades:
+        for ug in rpt.user_grades:
             from moodle_cli.output import console
+
             console.print(f"\n[bold]User: {ug.get('userfullname', ug.get('userid', '?'))}[/bold]")
             items = ug.get("gradeitems", [])
             rows = [
-                {"Item": i.get("itemname", ""), "Grade": i.get("grade", ""), "Max": i.get("grademax", "")}
+                {
+                    "Item": i.get("itemname", ""),
+                    "Grade": i.get("grade", ""),
+                    "Max": i.get("grademax", ""),
+                }
                 for i in items
             ]
             render_table(rows)

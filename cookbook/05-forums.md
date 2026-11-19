@@ -59,21 +59,21 @@ moodle-readonly -p default --json forum posts 647185 | jq -r '.[] | "\(.author.f
 ## Finding threads that await a reply ("ball with me")
 
 A thread needs you when its **last poster isn't you**. The discussions list carries
-`usermodifiedfullname` (last poster) and `numreplies`:
+`last_author` (last poster) and `replies`:
 
 ```bash
 ME="Your Name"
 moodle-readonly -p default --json forum discussions <forum_id> | jq -r --arg me "$ME" '
-  .[] | select(.usermodifiedfullname != $me)
-      | "\(.discussion)\t[\(.numreplies) replies]\tlast: \(.usermodifiedfullname)\t\(.subject)"'
+  .[] | select(.last_author != $me)
+      | "\(.id)\t[\(.replies) replies]\tlast: \(.last_author)\t\(.subject)"'
 ```
 
 Refine it to "student-started AND I never replied" by also checking the starter:
 
 ```bash
 moodle-readonly -p default --json forum discussions <forum_id> | jq -r --arg me "$ME" '
-  .[] | select(.userfullname != $me and .usermodifiedfullname != $me)
-      | "\(.discussion)\t\(.subject)"'
+  .[] | select(.author != $me and .last_author != $me)
+      | "\(.id)\t\(.subject)"'
 ```
 
 > This is exactly the "standing forum-debt" detection an assistant agent wants: it

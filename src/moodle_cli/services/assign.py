@@ -2,32 +2,32 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import Field
 
-from moodle_cli.services.base import BaseService
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class Assignment(BaseModel):
+class AssignmentRecord(MoodleModel):
     id: int
     cmid: int = 0
     course: int = 0
     name: str = ""
-    duedate: int = 0
+    due_date: Annotated[int, Field(validation_alias="duedate")] = 0
     grade: float = 0
 
 
-class Submission(BaseModel):
+class Submission(MoodleModel):
     id: int
-    userid: int = 0
+    user_id: Annotated[int, Field(validation_alias="userid")] = 0
     status: str = ""
-    timemodified: int = 0
-    gradingstatus: str = ""
+    time_modified: Annotated[int, Field(validation_alias="timemodified")] = 0
+    grading_status: Annotated[str, Field(validation_alias="gradingstatus")] = ""
 
 
 class AssignService(BaseService):
-    def list_assignments(self, course_ids: list[int] | None = None) -> list[Assignment]:
+    def list_assignments(self, course_ids: list[int] | None = None) -> list[AssignmentRecord]:
         params: dict[str, Any] = {}
         if course_ids:
             params["courseids"] = course_ids
@@ -35,17 +35,15 @@ class AssignService(BaseService):
         assignments = []
         for course_data in data.get("courses", []):
             for a in course_data.get("assignments", []):
-                assignments.append(Assignment(**a))
+                assignments.append(AssignmentRecord.model_validate(a))
         return assignments
 
     def get_submissions(self, assignment_ids: list[int]) -> list[Submission]:
-        data = self.call(
-            "mod_assign_get_submissions", assignmentids=assignment_ids
-        )
+        data = self.call("mod_assign_get_submissions", assignmentids=assignment_ids)
         submissions = []
         for a in data.get("assignments", []):
             for s in a.get("submissions", []):
-                submissions.append(Submission(**s))
+                submissions.append(Submission.model_validate(s))
         return submissions
 
     def get_grades(self, assignment_ids: list[int]) -> list[dict[str, Any]]:
@@ -57,9 +55,43 @@ class AssignService(BaseService):
                 grades.append({"assignment": a.get("assignmentid"), **g})
         return grades
 
-    def get_submission_status(
-        self, assign_id: int, user_id: int | None = None
-    ) -> dict[str, Any]:
+    def submission_files(self, assignment_id: int) -> list[dict[str, Any]]:
+        """File URLs attached to submissions (including student uploads)."""
+        data = self.call("mod_assign_get_submissions", assignmentids=[assignment_id])
+        files: list[dict[str, Any]] = []
+        for assignment in data.get("assignments", []):
+            for submission in assignment.get("submissions", []):
+                for plugin in submission.get("plugins") or []:
+                    for area in plugin.get("fileareas") or []:
+                        for item in area.get("files") or []:
+                            url = str(item.get("fileurl") or item.get("url") or "")
+                            if not url:
+                                continue
+                            files.append(
+                                {
+                                    "url": url,
+                                    "name": str(item.get("filename") or item.get("name") or "file"),
+                                    "size": int(item.get("filesize") or item.get("size") or 0),
+                                    "timemodified": int(item.get("timemodified") or 0),
+                                }
+                            )
+        return files
+
+    def save_submission(self, assignment_id: int, plugin_data: dict[str, Any]) -> Any:
+        return self.call(
+            "mod_assign_save_submission",
+            assignmentid=assignment_id,
+            plugindata=plugin_data,
+        )
+
+    def submit_for_grading(self, assignment_id: int, accept_statement: int = 1) -> Any:
+        return self.call(
+            "mod_assign_submit_for_grading",
+            assignmentid=assignment_id,
+            acceptsubmissionstatement=accept_statement,
+        )
+
+    def get_submission_status(self, assign_id: int, user_id: int | None = None) -> dict[str, Any]:
         """Per-user submission + grading status (mod_assign_get_submission_status)."""
         params: dict[str, Any] = {"assignid": assign_id}
         if user_id is not None:
@@ -74,6 +106,7 @@ class AssignService(BaseService):
         grade: float,
         feedback: str = "",
         workflow_state: str = "",
+        advanced_grading: dict[str, Any] | None = None,
     ) -> None:
         # `workflowstate` MUST stay empty unless the assignment has marking
         # workflow enabled (markingworkflow=1). Sending a non-empty state such as
@@ -96,4 +129,13 @@ class AssignService(BaseService):
             # would blanket the whole team, which this command must not do).
             applytoall=0,
             plugindata={"assignfeedbackcomments_editor": {"text": feedback, "format": 1}},
+            **({"advancedgradingdata": advanced_grading} if advanced_grading else {}),
+        )
+
+    def grading_definitions(self, cmid: int) -> Any:
+        return self.call(
+            "core_grading_get_definitions",
+            cmids=[cmid],
+            arenaname="mod_assign",
+            activeonly=1,
         )

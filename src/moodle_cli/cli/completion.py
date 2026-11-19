@@ -47,13 +47,37 @@ def course(ctx: MoodleContext, course_id: int, user_id: int) -> None:
 @handle_errors
 def status(ctx: MoodleContext, course_id: int, user_id: int | None) -> None:
     """Show activity completion status for a course."""
+    if user_id is None:
+        statuses = ctx.get_moodle().course(course_id).completion
+        if ctx.json_output:
+            render_json([s.to_dict() for s in statuses])
+        else:
+            state_map = {
+                0: "Not completed",
+                1: "Completed",
+                2: "Complete (pass)",
+                3: "Complete (fail)",
+            }
+            rows = [
+                {
+                    "CMID": s.cmid,
+                    "Module": s.mod_name,
+                    "State": state_map.get(s.state, str(s.state)),
+                }
+                for s in statuses
+            ]
+            render_table(rows, title=f"Completion Status ({len(rows)})")
+        return
     svc = CompletionService(ctx.get_client())
     statuses = svc.get_status(course_id, user_id)
     if ctx.json_output:
         render_json([s.model_dump() for s in statuses])
     else:
         state_map = {0: "Not completed", 1: "Completed", 2: "Complete (pass)", 3: "Complete (fail)"}
-        rows = [{"CMID": s.cmid, "Module": s.modname, "State": state_map.get(s.state, str(s.state))} for s in statuses]
+        rows = [
+            {"CMID": s.cmid, "Module": s.mod_name, "State": state_map.get(s.state, str(s.state))}
+            for s in statuses
+        ]
         render_table(rows, title=f"Completion Status ({len(rows)})")
 
 
@@ -68,3 +92,17 @@ def update_status(ctx: MoodleContext, cmid: int, completed: bool) -> None:
     svc.update_status(cmid, completed)
     state = "complete" if completed else "incomplete"
     console.print(f"[green]Marked activity {cmid} as {state}.[/green]")
+
+
+@completion.command("script")
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish", "powershell"]))
+def script(shell: str) -> None:
+    """Print shell completion for the moodle command (bash, zsh, fish, powershell)."""
+    from click.shell_completion import get_completion_class
+
+    from moodle_cli.cli.main import cli as root
+
+    cls = get_completion_class(shell)
+    if cls is None:
+        raise click.UsageError(f"Unsupported shell: {shell}")
+    click.echo(cls(root, {}, "moodle", "_MOODLE_COMPLETE").source())

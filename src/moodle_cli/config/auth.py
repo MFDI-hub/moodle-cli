@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import keyring
+import keyring.errors
 
 SERVICE_NAME = "moodle-cli"
 

@@ -38,10 +38,9 @@ def best_grade(ctx: MoodleContext, quiz_id: int, user_id: int | None) -> None:
 @handle_errors
 def list_quizzes(ctx: MoodleContext, course_id: int) -> None:
     """List quizzes in a course."""
-    svc = QuizService(ctx.get_client())
-    quizzes = svc.list_quizzes(course_id)
+    quizzes = ctx.get_moodle().course(course_id).quizzes
     if ctx.json_output:
-        render_json([q.model_dump() for q in quizzes])
+        render_json([q.to_dict() for q in quizzes])
     else:
         rows = [{"ID": q.id, "Name": q.name, "Grade": q.grade} for q in quizzes]
         render_table(rows, title=f"Quizzes ({len(rows)})")
@@ -83,7 +82,76 @@ def attempts(ctx: MoodleContext, quiz_id: int, user_id: int | None) -> None:
         render_json([a.model_dump() for a in atts])
     else:
         rows = [
-            {"ID": a.id, "User": a.userid, "Attempt": a.attempt, "State": a.state, "Grade": a.grade or ""}
+            {
+                "ID": a.id,
+                "User": a.user_id,
+                "Attempt": a.attempt,
+                "State": a.state,
+                "Grade": a.grade or "",
+            }
             for a in atts
         ]
         render_table(rows, title=f"Attempts ({len(rows)})")
+
+
+@quiz.command()
+@click.argument("quiz_id", type=int)
+@pass_context
+@handle_errors
+def start(ctx: MoodleContext, quiz_id: int) -> None:
+    """Start a quiz attempt."""
+    data = QuizService(ctx.get_client()).start_attempt(quiz_id)
+    if ctx.json_output:
+        render_json(data)
+    else:
+        attempt = data.get("attempt") or data
+        console.print(f"[green]Started attempt {attempt.get('id', attempt)}[/green]")
+
+
+@quiz.command("questions")
+@click.argument("attempt_id", type=int)
+@click.option("--page", default=0, type=int)
+@pass_context
+@handle_errors
+def questions(ctx: MoodleContext, attempt_id: int, page: int) -> None:
+    """List questions on an in-progress attempt."""
+    data = QuizService(ctx.get_client()).attempt_data(attempt_id, page)
+    if ctx.json_output:
+        render_json(data)
+    else:
+        rows = [
+            {"Slot": q.get("slot"), "Type": q.get("type"), "Status": q.get("status")}
+            for q in data.get("questions", [])
+        ]
+        render_table(rows, title=f"Questions ({len(rows)})")
+
+
+@quiz.command()
+@click.argument("attempt_id", type=int)
+@click.option("--answer", "answers", multiple=True, help="name=value (Moodle question field)")
+@pass_context
+@handle_errors
+def save(ctx: MoodleContext, attempt_id: int, answers: tuple[str, ...]) -> None:
+    """Save answers on an in-progress attempt."""
+    payload = dict(item.split("=", 1) for item in answers)
+    result = QuizService(ctx.get_client()).save_attempt(attempt_id, payload)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Saved attempt {attempt_id}.[/green]")
+
+
+@quiz.command("process")
+@click.argument("attempt_id", type=int)
+@click.option("--answer", "answers", multiple=True, help="name=value")
+@click.option("--finish", is_flag=True, help="Submit the attempt.")
+@pass_context
+@handle_errors
+def process(ctx: MoodleContext, attempt_id: int, answers: tuple[str, ...], finish: bool) -> None:
+    """Process (and optionally finish) a quiz attempt."""
+    payload = dict(item.split("=", 1) for item in answers)
+    result = QuizService(ctx.get_client()).process_attempt(attempt_id, payload, finish=finish)
+    if ctx.json_output:
+        render_json(result)
+    else:
+        console.print(f"[green]Processed attempt {attempt_id}.[/green]")

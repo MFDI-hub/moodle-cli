@@ -31,9 +31,28 @@ def test_all_groups_present() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["--help"])
     expected = [
-        "auth", "site", "course", "user", "enrol", "grade",
-        "assign", "forum", "quiz", "calendar", "message",
-        "completion", "file", "cohort", "role", "call",
+        "auth",
+        "site",
+        "course",
+        "user",
+        "enrol",
+        "grade",
+        "assign",
+        "forum",
+        "quiz",
+        "calendar",
+        "message",
+        "completion",
+        "file",
+        "cohort",
+        "role",
+        "call",
+        "sync",
+        "blog",
+        "search",
+        "chat",
+        "h5p",
+        "scorm",
     ]
     for group in expected:
         assert group in result.output, f"Missing command group: {group}"
@@ -53,5 +72,5 @@ def test_course_subcommands() -> None:
     runner = CliRunner()
     result = runner.invoke(cli, ["course", "--help"])
     assert result.exit_code == 0
-    for cmd in ["list", "get", "search", "contents", "create", "update", "delete"]:
+    for cmd in ["list", "get", "search", "contents", "dump", "create", "update", "delete"]:
         assert cmd in result.output, f"Missing course subcommand: {cmd}"

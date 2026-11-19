@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import BaseModel
+from pydantic import Field
 
-from moodle_cli.services.base import BaseService
+from moodle_cli.services.base import BaseService, MoodleModel
 
 
-class CompletionStatus(BaseModel):
+class CompletionStatus(MoodleModel):
     cmid: int = 0
-    modname: str = ""
+    mod_name: Annotated[str, Field(validation_alias="modname")] = ""
     instance: int = 0
     state: int = 0
-    timecompleted: int = 0
+    time_completed: Annotated[int, Field(validation_alias="timecompleted")] = 0
     tracking: int = 0
 
 
@@ -24,7 +24,7 @@ class CompletionService(BaseService):
         if user_id is not None:
             params["userid"] = user_id
         data = self.call("core_completion_get_activities_completion_status", **params)
-        return [CompletionStatus(**s) for s in data.get("statuses", [])]
+        return [CompletionStatus.model_validate(s) for s in data.get("statuses", [])]
 
     def get_course_status(self, course_id: int, user_id: int) -> dict[str, Any]:
         """Overall course-completion status for a user.

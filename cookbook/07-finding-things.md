@@ -8,7 +8,7 @@ other commands need.
 ```bash
 # Among the courses you're enrolled in (fast, no site-wide search)
 moodle-readonly -p default --json enrol my-courses \
-  | jq -r '.[] | select(.fullname|test("LAMB";"i")) | "\(.id)\t\(.shortname)\t\(.fullname)"'
+  | jq -r '.[] | select(.full_name|test("LAMB";"i")) | "\(.id)\t\(.short_name)\t\(.full_name)"'
 
 # Site-wide search (needs the search capability on your token)
 moodle-readonly -p default course search "LAMB"
@@ -38,7 +38,7 @@ To find a student's id from a course roster:
 
 ```bash
 moodle-readonly -p default --json enrol list-users <course_id> \
-  | jq -r '.[] | select(.fullname|test("Bordonau";"i")) | "\(.id)\t\(.fullname)\t\(.email)"'
+  | jq -r '.[] | select(.full_name|test("Bordonau";"i")) | "\(.id)\t\(.full_name)\t\(.email)"'
 ```
 
 ## Forums, groups, activities in a course

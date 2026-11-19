@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
-import httpx
+from curl_cffi import Session
+from curl_cffi.requests.exceptions import HTTPError, RequestException
 
-from moodle_cli.client.exceptions import (
+from moodle_cli._utils import redact
+from moodle_cli.client.readonly import READ_ALLOWLIST
+from moodle_cli.exceptions import (
     AuthenticationError,
-    ConnectionError,
     MoodleAPIError,
+    MoodleConnectionError,
     ReadOnlyViolation,
 )
-from moodle_cli.client.readonly import READ_ALLOWLIST
+
+logger = logging.getLogger(__name__)
 
 
 def flatten_params(params: dict[str, Any], prefix: str = "") -> dict[str, str]:
@@ -40,7 +45,11 @@ def flatten_params(params: dict[str, Any], prefix: str = "") -> dict[str, str]:
 
 
 class MoodleHTTPClient:
-    """HTTP client for Moodle Web Services."""
+    """HTTP client for Moodle Web Services.
+
+    Token REST calls go to ``/webservice/rest/server.php``. Diagnostic detail is
+    emitted with :mod:`logging`; the CLI turns that on via ``--verbose``.
+    """
 
     def __init__(
         self,
@@ -54,7 +63,8 @@ class MoodleHTTPClient:
         self.token = token
         self.service = service
         self.readonly = readonly
-        self._client = httpx.Client(timeout=timeout)
+        self.verbose = False
+        self.session = Session(impersonate="firefox155", timeout=timeout)
 
     @property
     def rest_url(self) -> str:
@@ -78,17 +88,16 @@ class MoodleHTTPClient:
         flat["wsfunction"] = wsfunction
         flat["moodlewsrestformat"] = "json"
 
+        logger.debug("POST %s %s", wsfunction, redact(flat))
+
         try:
-            resp = self._client.post(self.rest_url, data=flat)
+            resp = self.session.post(self.rest_url, data=flat)
             resp.raise_for_status()
-        except httpx.ConnectError as exc:
-            raise ConnectionError(
-                f"Could not connect to {self.base_url}: {exc}"
-            ) from exc
-        except httpx.HTTPStatusError as exc:
-            raise ConnectionError(
-                f"HTTP {exc.response.status_code} from {self.base_url}"
-            ) from exc
+        except HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "error"
+            raise MoodleConnectionError(f"HTTP {status} from {self.base_url}") from exc
+        except RequestException as exc:
+            raise MoodleConnectionError(f"Could not connect to {self.base_url}: {exc}") from exc
 
         data = resp.json()
 
@@ -102,27 +111,30 @@ class MoodleHTTPClient:
         return data
 
     @staticmethod
-    def authenticate(base_url: str, username: str, password: str, service: str = "moodle_mobile_app") -> str:
+    def authenticate(
+        base_url: str, username: str, password: str, service: str = "moodle_mobile_app"
+    ) -> str:
         """Authenticate and return a token.
 
         Posts to /login/token.php and returns the token string.
         """
         url = f"{base_url.rstrip('/')}/login/token.php"
         try:
-            resp = httpx.post(
-                url,
-                data={
-                    "username": username,
-                    "password": password,
-                    "service": service,
-                },
-                timeout=30.0,
-            )
-            resp.raise_for_status()
-        except httpx.ConnectError as exc:
-            raise ConnectionError(f"Could not connect to {base_url}: {exc}") from exc
-        except httpx.HTTPStatusError as exc:
-            raise ConnectionError(f"HTTP {exc.response.status_code} from {base_url}") from exc
+            with Session(impersonate="firefox155", timeout=30.0) as session:
+                resp = session.post(
+                    url,
+                    data={
+                        "username": username,
+                        "password": password,
+                        "service": service,
+                    },
+                )
+                resp.raise_for_status()
+        except HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else "error"
+            raise MoodleConnectionError(f"HTTP {status} from {base_url}") from exc
+        except RequestException as exc:
+            raise MoodleConnectionError(f"Could not connect to {base_url}: {exc}") from exc
 
         data = resp.json()
         if "token" in data:
@@ -132,7 +144,8 @@ class MoodleHTTPClient:
         raise AuthenticationError(error, error_code=data.get("errorcode"))
 
     def close(self) -> None:
-        self._client.close()
+        """Release the underlying HTTP session."""
+        self.session.close()
 
     def __enter__(self) -> MoodleHTTPClient:
         return self

@@ -24,20 +24,20 @@ moodle-readonly -p default --json enrol list-users "$C" \
 ## Engagement — who's actually been here
 
 The enrolled-users list carries each person's **last access to this course**
-(`lastcourseaccess`). That's the real engagement signal.
+(`last_course_access`). That's the real engagement signal.
 
 ```bash
 # How many students have EVER accessed the course
 moodle-readonly -p default --json enrol list-users "$C" | jq '
   [ .[] | select(.roles[].shortname=="student") ] as $st
   | { students: ($st|length),
-      ever_accessed: ([ $st[] | select((.lastcourseaccess // 0) > 0) ] | length) }'
+      ever_accessed: ([ $st[] | select((.last_course_access // 0) > 0) ] | length) }'
 # →  { "students": 25, "ever_accessed": 21 }
 
 # Active in the last 7 days
 now=$(date +%s); wk=$((now - 7*86400))
 moodle-readonly -p default --json enrol list-users "$C" \
-  | jq --arg wk "$wk" '[ .[] | select((.lastcourseaccess // 0) > ($wk|tonumber)) ] | length'
+  | jq --arg wk "$wk" '[ .[] | select((.last_course_access // 0) > ($wk|tonumber)) ] | length'
 ```
 
 ## Forum traffic
@@ -50,11 +50,11 @@ moodle-readonly -p default forum discussions <forum_id>
 ```bash
 # Total threads + total replies in a forum
 moodle-readonly -p default --json forum discussions <forum_id> | jq '
-  { threads: length, replies: ([ .[].numreplies ] | add) }'
+  { threads: length, replies: ([ .[].replies ] | add) }'
 
 # Distinct students who started a thread (participation breadth)
 moodle-readonly -p default --json forum discussions <forum_id> \
-  | jq '[ .[].userfullname ] | unique | length'
+  | jq '[ .[].author ] | unique | length'
 ```
 
 ## Content inventory — what's in the course

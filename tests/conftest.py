@@ -7,11 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import respx
 from click.testing import CliRunner
-from httpx import Response
 
 from moodle_cli.client.http import MoodleHTTPClient
+from tests.http_mock import Router
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures" / "responses"
 
@@ -22,15 +21,14 @@ TOKEN = "test-token-abc123"
 @pytest.fixture(autouse=True)
 def isolate_cli_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Keep CLI tests off the real config file and OS keyring."""
-    from moodle_cli.config import auth as authmod
-    from moodle_cli.config import manager as mgr
+    from moodle_cli.config import auth as authmod, manager as mgr
 
     monkeypatch.setattr(mgr, "DEFAULT_CONFIG_FILE", tmp_path / "config.toml")
 
     store: dict[tuple[str, str], str] = {}
 
     class FakeKeyring:
-        class errors:  # noqa: N801 - mimic keyring.errors namespace
+        class errors:
             class PasswordDeleteError(Exception):
                 pass
 
@@ -62,14 +60,21 @@ def cli_runner() -> CliRunner:
 
 
 @pytest.fixture
-def mock_api() -> respx.MockRouter:
-    """Activate respx mock for the Moodle REST API."""
-    with respx.mock(assert_all_called=False) as router:
-        yield router
+def mock_http(monkeypatch: pytest.MonkeyPatch) -> Router:
+    """Patch curl_cffi Session.post and return a router for canned responses."""
+    from curl_cffi import Session
 
+    router = Router()
 
-def mock_ws_response(router: respx.MockRouter, data: Any) -> None:
-    """Helper to mock a POST to the Moodle REST endpoint."""
-    router.post(f"{BASE_URL}/webservice/rest/server.php").mock(
-        return_value=Response(200, json=data)
-    )
+    def fake_post(
+        self: Session,
+        url: str,
+        data: Any = None,
+        json: Any = None,
+        headers: dict[str, str] | None = None,
+        **kwargs: Any,
+    ) -> Any:
+        return router.dispatch(url, data=data, json=json, headers=headers)
+
+    monkeypatch.setattr(Session, "post", fake_post)
+    return router

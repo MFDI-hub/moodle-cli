@@ -6,7 +6,7 @@ import click
 
 from moodle_cli.cli.main import MoodleContext, handle_errors, pass_context
 from moodle_cli.output import render_json, render_table
-from moodle_cli.services.content import CONTENT_TYPES, ContentService
+from moodle_cli.services.content import CONTENT_TYPES
 
 
 @click.group()
@@ -32,17 +32,17 @@ def types(ctx: MoodleContext) -> None:
 @handle_errors
 def list_content(ctx: MoodleContext, module_type: str, course_id: int) -> None:
     """List activities of MODULE_TYPE in a course (e.g. `content list url 106264`)."""
-    svc = ContentService(ctx.get_client())
-    items = svc.list_activities(module_type, course_id)
+    needle = "h5pactivity" if module_type == "h5p" else module_type
+    items = ctx.get_moodle().course(course_id).of(needle)
     if ctx.json_output:
-        render_json(items)
+        render_json([it.to_dict() for it in items])
     else:
         rows = [
             {
-                "ID": it.get("id"),
-                "Name": it.get("name", ""),
-                "CM": it.get("coursemodule", ""),
-                "Visible": it.get("visible", ""),
+                "ID": it.id,
+                "Name": it.name,
+                "CM": it.id,
+                "Visible": it.visible,
             }
             for it in items
         ]
