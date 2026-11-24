@@ -2,6 +2,6 @@
 # RTD installs this list only. It does not run `uv sync`, so every MkDocs
 # plugin named in mkdocs.yml has to be here, including mkdocstrings.
 mkdocs>=1.6
-mkdocs-material>=9.5
+mkdocs-material>=9.8.2
 mkdocs-git-revision-date-localized-plugin
 mkdocstrings[python]>=1.0.8
