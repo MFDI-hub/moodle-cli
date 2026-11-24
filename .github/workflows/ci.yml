@@ -38,7 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install uv (official Astral action)
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           # Pin a full version: from v8 on, major tags like "@v10" do not resolve.
           # Update this as needed.
@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10.3.3
+        uses: astral-sh/setup-uv@v10.4.0
         with:
           version: "0.13.8"
           enable-cache: true
