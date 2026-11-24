@@ -79,7 +79,7 @@ moodle_readonly = "moodle_cli.cli.readonly:main"
 # `dev` is installed by plain `uv sync` (it is uv's default group).
 dev = [
     # Lint, format, type check.
-    "ruff>=0.17.3",
+    "ruff>=0.17.6",
     # Pin an exact preview: ty is pre-1.0 and config/rule names have moved between releases.
     "ty==0.0.104",
     "codespell>=2.4.3",
